@@ -146,10 +146,22 @@ const App = () => {
                         newScenario.settings[key] = value;
                     }
 
-                    if (key === 'birthYear' || key === 'lifeExpectancy') {
+                    // [수정] birthYear 또는 lifeExpectancy 변경 시 endYear를 올바르게 재계산합니다.
+                    // (참고: 'scenario'는 변경 전 상태, 'newScenario'는 변경 중인 상태입니다)
+                    if (key === 'birthYear') {
+                        const newBirthYear = parseInt(value, 10);
+                        // 기존 기대수명을 (변경 전 endYear - 변경 전 birthYear)로 계산합니다.
+                        const lifeExpectancy = scenario.settings.endYear - scenario.settings.birthYear;
+                        if (!isNaN(lifeExpectancy) && !isNaN(newBirthYear)) {
+                            newScenario.settings.endYear = newBirthYear + lifeExpectancy;
+                        }
+                    } else if (key === 'lifeExpectancy') {
+                        // 'lifeExpectancy'는 settings에 저장되지 않지만, BasicSettings.js가 이 key로 호출합니다.
                         const birthYear = newScenario.settings.birthYear;
-                        const lifeExpectancy = newScenario.settings.lifeExpectancy;
-                        newScenario.settings.endYear = parseInt(birthYear, 10) + parseInt(lifeExpectancy, 10);
+                        const newLifeExpectancy = parseInt(value, 10);
+                        if (!isNaN(birthYear) && !isNaN(newLifeExpectancy)) {
+                            newScenario.settings.endYear = birthYear + newLifeExpectancy;
+                        }
                     }
                     return newScenario;
                 }
@@ -352,7 +364,7 @@ const App = () => {
                             <AssetProfiles
                                 scenario={activeScenario}
                                 onUpdate={handleSettingsChange}
-                                useSimpleMode={activeScenario.settings.useSimpleMode}
+                                useSimpleMode={activeScenario.settings.portfolio.useSimpleMode}
                             />
                         </div>
                     )}
