@@ -246,12 +246,12 @@ const tableInputStyle = {
                         <div>
                             <label style={labelStyle} htmlFor="nonRegTotal">Non-Registered Total</label>
                             <input
-                                type: "number",
-                                id: "nonRegTotal",
-                                style: inputStyle,
-                                value: scenario.settings.initialBalances.nonReg,
-                                onChange: (e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, nonReg: parseFloat(e.target.value) || 0 })
-                            }
+                                type="number"
+                                id="nonRegTotal"
+                                style={inputStyle}
+                                value={scenario.settings.initialBalances.nonReg}
+                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, nonReg: parseFloat(e.target.value) || 0 })}
+                            />
                         </div>
                         {/* --- [추가] ACB 비율 입력 필드 --- */}
                         <div>
