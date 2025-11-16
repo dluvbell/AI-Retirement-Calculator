@@ -46,27 +46,50 @@ const deepCopy = (obj, visited = new WeakMap()) => {
 };
 
 /**
- * 현재 시나리오를 JSON 파일로 내보냅니다.
- * App.js에서 사용합니다.
+ * [추가] 계좌의 총액을 계산합니다.
+ * (AssetsStrategy.js, simulation.js에서 공통 사용)
  */
-const exportScenarioToJSON = (scenario) => {
-    try {
-        const dataStr = JSON.stringify(scenario, null, 4);
-        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-        const exportFileDefaultName = `${scenario.name.replace(/ /g, '_') || 'scenario'}.json`;
-
-        const linkElement = document.createElement('a');
-        linkElement.setAttribute('href', dataUri);
-        linkElement.setAttribute('download', exportFileDefaultName);
-        linkElement.click();
-    } catch (err) {
-        console.error("Error exporting scenario:", err);
-        alert("Failed to export scenario. See console for details.");
+const getAccountTotal = (holdings) => {
+    if (!holdings || typeof holdings !== 'object') {
+        return 0;
     }
+    return Object.values(holdings).reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
 };
 
 /**
- * JSON 파일을 읽어 시나리오를 불러옵니다.
+ * [추가] 계좌의 자산 배분 비율(%)을 계산합니다.
+ * (AssetsStrategy.js에서 공통 사용)
+ */
+const getAccountComposition = (holdings) => {
+    const total = getAccountTotal(holdings);
+    if (total === 0) {
+        return {}; // 0으로 나누기 방지
+    }
+    const composition = {};
+    for (const key in holdings) {
+        composition[key] = (holdings[key] / total) * 100;
+    }
+    return composition;
+};
+
+/**
+ * 시나리오 객체를 JSON 파일로 내보냅니다.
+ * App.js에서 사용합니다.
+ */
+const exportScenarioToJSON = (scenario) => {
+    const dataStr = JSON.stringify(scenario, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `${scenario.name.replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+};
+
+/**
+ * JSON 파일로부터 시나리오 객체를 불러옵니다.
  * App.js에서 사용합니다.
  */
 const importScenarioFromJSON = (file, callback) => {
@@ -104,19 +127,15 @@ const exportToCSV = (logData, fileName) => {
     const headers = Object.keys(logData[0]).join(',');
     const rows = logData.map(row => 
         Object.values(row).map(val => 
-            typeof val === 'object' ? `"${JSON.stringify(val).replace(/"/g, '""')}"` : val
+            typeof val === 'object' ? `\"${JSON.stringify(val).replace(/\"/g, '\"\"')}\"` : val
         ).join(',')
     );
 
     const csvContent = [headers, ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${fileName}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
+    link.href = URL.createObjectURL(blob);
+    link.download = `${fileName}.csv`;
     link.click();
-    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
 };
