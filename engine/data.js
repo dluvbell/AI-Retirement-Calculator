@@ -9,34 +9,37 @@
 const ASSET_KEYS = ['growth', 'balanced', 'dividend_can', 'dividend_us', 'bond', 'gic'];
 
 // 1. 기본 자산 프로파일 (6개 자산군)
+// [수정] 모든 비율을 100을 곱한 값으로 변경 (예: 0.08 -> 8)
 const DEFAULT_ASSET_PROFILES = {
-    growth: { name: 'Growth Stocks', growth: 0.08, dividend: 0.005, volatility: 0.18, dividend_growth: 0.05 },
-    balanced: { name: 'Balanced Stocks', growth: 0.05, dividend: 0.015, volatility: 0.12, dividend_growth: 0.04 },
-    dividend_can: { name: 'CAN Dividend', growth: 0.03, dividend: 0.04, volatility: 0.10, dividend_growth: 0.03 },
-    dividend_us: { name: 'US Dividend', growth: 0.04, dividend: 0.03, volatility: 0.11, dividend_growth: 0.03 },
-    bond: { name: 'Bonds', growth: 0.01, dividend: 0.025, volatility: 0.05, dividend_growth: 0.0 },
-    gic: { name: 'GIC/Cash', growth: 0.0, dividend: 0.02, volatility: 0.001, dividend_growth: 0.0 }
+    growth: { name: 'Growth Stocks', growth: 8.0, dividend: 0.5, volatility: 18.0, dividend_growth: 5.0 },
+    balanced: { name: 'Balanced Stocks', growth: 5.0, dividend: 1.5, volatility: 12.0, dividend_growth: 4.0 },
+    dividend_can: { name: 'CAN Dividend', growth: 3.0, dividend: 4.0, volatility: 10.0, dividend_growth: 3.0 },
+    dividend_us: { name: 'US Dividend', growth: 4.0, dividend: 3.0, volatility: 11.0, dividend_growth: 3.0 },
+    bond: { name: 'Bonds', growth: 1.0, dividend: 2.5, volatility: 5.0, dividend_growth: 0.0 },
+    gic: { name: 'GIC/Cash', growth: 0.0, dividend: 2.0, volatility: 0.1, dividend_growth: 0.0 }
 };
 
+
 // 2. 기본 포트폴리오 (6개 자산군)
+// [수정] 모든 비율을 100을 곱한 값으로 변경 (예: 0.50 -> 50)
 const DEFAULT_PORTFOLIO = {
     useSimpleMode: true,
     // 간단 모드 (글라이드패스)
     startComposition: {
-        growth: 0.50,
-        balanced: 0.10,
+        growth: 50.0,
+        balanced: 10.0,
         dividend_can: 0.0,
         dividend_us: 0.0,
-        bond: 0.40,
+        bond: 40.0,
         gic: 0.0
     },
     endComposition: {
-        growth: 0.30,
-        balanced: 0.10,
+        growth: 30.0,
+        balanced: 10.0,
         dividend_can: 0.0,
         dividend_us: 0.0,
-        bond: 0.50,
-        gic: 0.10
+        bond: 50.0,
+        gic: 10.0
     }
 };
 
@@ -63,12 +66,14 @@ const DEFAULT_ADVANCED_SETTINGS = {
 
 // 4. 기본 수입 및 지출
 const DEFAULT_INCOMES = [
-    { id: 1, type: 'CPP', amount: 15000, startYear: 2050, endYear: 2085, growthRate: 0.025 },
-    { id: 2, type: 'OAS', amount: 8000, startYear: 2050, endYear: 2085, growthRate: 0.025 }
+    // [수정] growthRate를 100 곱한 값으로 변경 (예: 0.025 -> 2.5)
+    { id: 1, type: 'CPP', amount: 15000, startYear: 2050, endYear: 2085, growthRate: 2.5 },
+    { id: 2, type: 'OAS', amount: 8000, startYear: 2050, endYear: 2085, growthRate: 2.5 }
 ];
 
 const DEFAULT_EXPENSES = [
-    { id: 1, type: 'Living Expenses', amount: 50000, startYear: 2035, endYear: 2085, growthRate: 0.025 }
+    // [수정] growthRate를 100 곱한 값으로 변경 (예: 0.025 -> 2.5)
+    { id: 1, type: 'Living Expenses', amount: 50000, startYear: 2035, endYear: 2085, growthRate: 2.5 }
 ];
 
 // 5. 기본 일회성 이벤트 (세금 유형 포함)
@@ -94,18 +99,9 @@ const DEFAULT_ONE_TIME_EVENTS = [
     }
 ];
 
-// 6. 몬테카를로 및 전문가 설정
+// 6. 몬테카를로 설정
 const DEFAULT_MONTE_CARLO = {
     simulationCount: 1000
-};
-
-const DEFAULT_EXPERT_MODE = {
-    enabled: false,
-    params: {
-        lookAheadYears: 7,
-        tfsaWithdrawalPenalty: 0.07,
-        rrspWithdrawalBonus: 0.02,
-    }
 };
 
 /**
@@ -145,17 +141,15 @@ const createNewScenario = (name) => {
 
             // AssetProfiles
             assetProfiles: deepCopy(DEFAULT_ASSET_PROFILES),
-            generalInflation: 0.025,
-            taxInflationRate: 0.025, // 세금 브라켓 인플레이션
+            // [수정] Inflation 값을 100 곱한 값으로 변경 (예: 0.025 -> 2.5)
+            generalInflation: 2.5,
+            taxInflationRate: 2.5, // 세금 브라켓 인플레이션
 
             // IncomesExpenses
             incomes: deepCopy(DEFAULT_INCOMES),
             expenses: deepCopy(DEFAULT_EXPENSES),
             oneTimeEvents: deepCopy(DEFAULT_ONE_TIME_EVENTS),
             
-            // ExpertSettings
-            expertMode: deepCopy(DEFAULT_EXPERT_MODE),
-
             // MonteCarlo
             monteCarlo: deepCopy(DEFAULT_MONTE_CARLO),
         }
@@ -188,8 +182,8 @@ const validateScenario = (scenario) => {
         const startSum = Object.values(settings.portfolio.startComposition).reduce((s, v) => s + v, 0);
         const endSum = Object.values(settings.portfolio.endComposition).reduce((s, v) => s + v, 0);
         // [수정] 합계를 1.0이 아닌 100.0과 비교합니다.
-        if (Math.abs(startSum - 100.0) > 0.001) errors.push("Simple Mode 'Start Composition' percentages must add up to 100%.");
-        if (Math.abs(endSum - 100.0) > 0.001) errors.push("Simple Mode 'End Composition' percentages must add up to 100%.");
+        if (Math.abs(startSum - 100.0) > 0.01) errors.push("Simple Mode 'Start Composition' percentages must add up to 100%. Current: " + startSum);
+        if (Math.abs(endSum - 100.0) > 0.01) errors.push("Simple Mode 'End Composition' percentages must add up to 100%. Current: " + endSum);
     }
 
     // 4. 자산 프로파일 검사
@@ -232,15 +226,19 @@ const createApiPayload = (scenario) => {
         gic: 'gic'
     };
     
-    // 2. 자산 프로파일 변환 (이름 매핑)
+    // 2. [수정] 자산 프로파일 변환 (이름 매핑 및 100으로 나누기)
     const mappedAssetProfiles = {};
     for (const key_js in scenario.settings.assetProfiles) {
         const key_py = assetProfileMap[key_js]; // JS 키를 Python 키로 변환
         if (key_py) {
+            const profile = scenario.settings.assetProfiles[key_js];
             mappedAssetProfiles[key_py] = {
-                ...scenario.settings.assetProfiles[key_js],
+                name: profile.name,
+                growth: (profile.growth || 0) / 100.0,
+                dividend: (profile.dividend || 0) / 100.0,
+                volatility: (profile.volatility || 0) / 100.0,
                 // Python 백엔드가 기대하는 필드 이름으로 수정
-                dividend_growth_rate: scenario.settings.assetProfiles[key_js].dividend_growth
+                dividend_growth_rate: (profile.dividend_growth || 0) / 100.0
             };
         }
     }
@@ -260,13 +258,14 @@ const createApiPayload = (scenario) => {
         }
     });
     
-    // 4. 간단 모드(글라이드패스) 변환 (이름 매핑)
+    // 4. [수정] 간단 모드(글라이드패스) 변환 (이름 매핑 및 100으로 나누기)
     const mapGlidePath = (composition) => {
         const mapped = {};
         for (const key_js in composition) {
             const key_py = assetProfileMap[key_js]; // JS 키를 Python 키로 변환
             if (key_py) {
-                mapped[key_py] = composition[key_js];
+                // [수정] 50 -> 0.5
+                mapped[key_py] = (composition[key_js] || 0) / 100.0;
             }
         }
         return mapped;
@@ -290,7 +289,8 @@ const createApiPayload = (scenario) => {
         start_age: scenario.settings.startYear - scenario.settings.birthYear,
         retirement_age: scenario.settings.startYear - scenario.settings.birthYear, // 은퇴 후 시뮬레이션
         end_age: scenario.settings.endYear - scenario.settings.birthYear,
-        pre_retirement_inflation: scenario.settings.generalInflation, // (이름은 다르지만 동일한 값 사용)
+        // [수정] generalInflation 값을 100으로 나누어 전송
+        pre_retirement_inflation: (scenario.settings.generalInflation || 0) / 100.0, 
         
         // 초기 자산
         initial: {
@@ -305,13 +305,14 @@ const createApiPayload = (scenario) => {
         // 수입/지출/이벤트
         // [KeyError: 'start_year' 수정]
         // [수정] ...item 대신 Python이 요구하는 키만 명시적으로 전달합니다.
+        // [수정] growthRate를 100으로 나누어 전송 (예: 2.5 -> 0.025)
         income_items: scenario.settings.incomes.map(item => ({
             id: item.id,
             type: item.type,
             amount: item.amount,
             start_year: item.startYear,
             end_year: item.endYear,
-            growth_rate: item.growthRate
+            growth_rate: (item.growthRate || 0) / 100.0
         })),
         expense_items: scenario.settings.expenses.map(item => ({
             id: item.id,
@@ -319,7 +320,7 @@ const createApiPayload = (scenario) => {
             amount: item.amount,
             start_year: item.startYear,
             end_year: item.endYear,
-            growth_rate: item.growthRate
+            growth_rate: (item.growthRate || 0) / 100.0
         })),
         one_time_events: mappedEvents,
 
@@ -340,14 +341,46 @@ const createApiPayload = (scenario) => {
         runs: scenario.settings.monteCarlo.simulationCount
     };
 
-    // [AI 2.0 서버 오류 수정]
-    // Non-Reg 계좌 생성에 필수적인 ACB(투자 원금) 데이터를 Python 키로 매핑하여 payload에 추가합니다.
+    // [수정] Non-Reg ACB 데이터를 모드에 따라 다르게 생성합니다.
     const mapped_non_reg_acb = {};
-    const acb_js = scenario.settings.advancedSettings.nonReg.acb;
-    for (const key_js in acb_js) {
-        const key_py = assetProfileMap[key_js]; // 'growth' -> 'stocks_growth'
-        if (key_py) {
-            mapped_non_reg_acb[key_py] = acb_js[key_js];
+    if (scenario.settings.portfolio.useSimpleMode) {
+        // --- 단순 모드 (Simple Mode) ---
+        // initialBalances와 startComposition을 기반으로 ACB를 동적 계산
+        const total_non_reg_value = scenario.settings.initialBalances.nonReg || 0;
+        const acb_ratio = (scenario.settings.initialBalances.nonRegAcbRatio || 0) / 100.0;
+        const total_acb = total_non_reg_value * acb_ratio;
+        const start_composition = scenario.settings.portfolio.startComposition;
+        
+        // startComposition의 총합이 0이 아닐 경우 (0으로 나누기 방지)
+        const total_comp_ratio = Object.values(start_composition).reduce((s, v) => s + v, 0);
+
+        for (const key_js in start_composition) {
+            const key_py = assetProfileMap[key_js];
+            if (key_py) {
+                if (total_comp_ratio > 0) {
+                    // ACB를 시작 포트폴리오 비율대로 분배
+                    const asset_ratio = (start_composition[key_js] || 0) / total_comp_ratio;
+                    mapped_non_reg_acb[key_py] = total_acb * asset_ratio;
+                } else {
+                    mapped_non_reg_acb[key_py] = 0;
+                }
+            }
+        }
+        // 만약 start_composition이 비어있다면, 첫 번째 자산에 ACB를 몰아넣음 (엣지 케이스)
+        if (total_comp_ratio === 0 && total_acb > 0) {
+             const first_py_key = assetProfileMap[ASSET_KEYS[0]];
+             if (first_py_key) mapped_non_reg_acb[first_py_key] = total_acb;
+        }
+
+    } else {
+        // --- 고급 모드 (Advanced Mode) ---
+        // 기존 로직: advancedSettings에서 직접 ACB 값을 가져옴
+        const acb_js = scenario.settings.advancedSettings.nonReg.acb;
+        for (const key_js in acb_js) {
+            const key_py = assetProfileMap[key_js]; // 'growth' -> 'stocks_growth'
+            if (key_py) {
+                mapped_non_reg_acb[key_py] = acb_js[key_js];
+            }
         }
     }
     payload.non_reg_acb = mapped_non_reg_acb;
