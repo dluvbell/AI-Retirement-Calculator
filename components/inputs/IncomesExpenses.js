@@ -28,7 +28,7 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
                 // 'incomes' 또는 'expenses'
                 newItemTemplate = {
                     id: Date.now(),
-                    name: '',
+                    type: '',
                     amount: 0,
                     startYear: scenario.settings.startYear,
                     endYear: scenario.settings.endYear,
@@ -213,7 +213,7 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
             {renderListSection(
                 'Recurring Incomes / Expenses',
                 'incomes',
-                { name: 'name', amount: 'amount', start: 'startYear', end: 'endYear' },
+                { name: 'type', amount: 'amount', start: 'startYear', end: 'endYear' }, // [수정] name -> type
                 'incomes' // 'Add' 버튼을 누를 때 사용할 폼 타입
             )}
             
@@ -236,8 +236,8 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
                         {type === 'incomes' && (
                             <div style={formGridStyle}>
                                 <div>
-                                    <label style={formLabelStyle}>Name</label>
-                                    <input type="text" style={formInputStyle} value={item.name} onChange={e => handleFormChange('name', e.target.value)} />
+                                    <label style={formLabelStyle}>Type (e.g., CPP, OAS, Living Expenses)</label>
+                                    <input type="text" style={formInputStyle} value={item.type} onChange={e => handleFormChange('type', e.target.value)} />
                                 </div>
                                 <div>
                                     <label style={formLabelStyle}>Amount (Annual)</label>
