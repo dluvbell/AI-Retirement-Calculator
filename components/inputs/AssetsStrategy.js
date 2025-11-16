@@ -210,15 +210,15 @@ const tableInputStyle = {
                     Initial Asset Totals
                 </h4>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', alignItems: 'end' }}>
-                        {/* 각 계좌별 총액 입력 필드 */}
+                        {/* [수정] Simple Mode가 initialBalances를 직접 수정하도록 변경 */}
                         <div>
                             <label style={labelStyle} htmlFor="rrspTotal">RRSP Total</label>
                             <input
                                 type="number"
                                 id="rrspTotal"
                                 style={inputStyle}
-                                value={getAccountTotal(scenario.settings.advancedSettings.rrsp.holdings)}
-                                onChange={(e) => handleTotalChange('rrsp', e.target.value)}
+                                value={scenario.settings.initialBalances.rrsp}
+                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, rrsp: parseFloat(e.target.value) || 0 })}
                             />
                         </div>
                         <div>
@@ -227,8 +227,8 @@ const tableInputStyle = {
                                 type="number"
                                 id="tfsaTotal"
                                 style={inputStyle}
-                                value={getAccountTotal(scenario.settings.advancedSettings.tfsa.holdings)}
-                                onChange={(e) => handleTotalChange('tfsa', e.target.value)}
+                                value={scenario.settings.initialBalances.tfsa}
+                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, tfsa: parseFloat(e.target.value) || 0 })}
                             />
                         </div>
                         <div>
@@ -237,8 +237,8 @@ const tableInputStyle = {
                                 type="number"
                                 id="nonRegTotal"
                                 style={inputStyle}
-                                value={getAccountTotal(scenario.settings.advancedSettings.nonReg.holdings)}
-                                onChange={(e) => handleTotalChange('nonReg', e.target.value)}
+                                value={scenario.settings.initialBalances.nonReg}
+                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, nonReg: parseFloat(e.target.value) || 0 })}
                             />
                         </div>
                         {/* --- [추가] ACB 비율 입력 필드 --- */}
