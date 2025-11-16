@@ -10,7 +10,9 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
 
     const handleShowForm = (type, itemToEdit = null) => {
         if (itemToEdit) {
-            const itemWithFlag = type === 'incomes' ? { ...itemToEdit, isExpense: !!itemToEdit.isExpense } : itemToEdit;
+            // [수정] expenses 리스트에서 편집할 때 isExpense 플래그를 올바르게 설정합니다.
+            const isExpense = type === 'expenses' || (itemToEdit && itemToEdit.isExpense);
+            const itemWithFlag = { ...itemToEdit, isExpense: isExpense };
             setActiveFormState({ type: type, item: itemWithFlag, isEditing: true });
         } else {
             let newItemTemplate;
@@ -28,12 +30,12 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
                 // 'incomes' 또는 'expenses'
                 newItemTemplate = {
                     id: Date.now(),
-                    type: '',
+                    type: type === 'expenses' ? 'Living Expenses' : 'CPP', // [수정] 기본값 설정
                     amount: 0,
                     startYear: scenario.settings.startYear,
                     endYear: scenario.settings.endYear,
                     growthRate: scenario.settings.generalInflation,
-                    isExpense: type === 'expenses'
+                    isExpense: type === 'expenses' // [수정] type에 따라 isExpense 설정
                 };
             }
             setActiveFormState({ type: type, item: newItemTemplate, isEditing: false });
@@ -75,10 +77,8 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
     const handleSaveItem = () => {
         const { type, item, isEditing } = activeFormState;
         
-        let listKey = type;
-        if (type === 'incomes') {
-            listKey = item.isExpense ? 'expenses' : 'incomes';
-        }
+        // [수정] isExpense 플래그에 따라 올바른 listKey를 결정합니다.
+        let listKey = (type === 'oneTimeEvents') ? 'oneTimeEvents' : (item.isExpense ? 'expenses' : 'incomes');
 
         const currentList = scenario.settings[listKey] || [];
         let newList;
@@ -124,7 +124,7 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
                             <span style={{ flex: 1, textAlign: 'right', color: '#e5e7eb' }}>{formatCurrency(item[itemNames.amount], 0)}</span>
                             <span style={{ flex: 1, textAlign: 'right' }}>{item[itemNames.start]} - {item[itemNames.end]}</span>
                             <div style={{ flexShrink: 0, marginLeft: '12px' }}>
-                                <button onClick={() => handleShowForm(showFormType, item)} style={iconButtonStyle}>Edit</button>
+                                <button onClick={() => handleShowForm(listKey, item)} style={iconButtonStyle}>Edit</button>
                                 <button onClick={() => handleDeleteItem(listKey, item.id)} style={{...iconButtonStyle, color: '#f87171'}}>Delete</button>
                             </div>
                         </div>
@@ -211,10 +211,18 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
         <div style={{ backgroundColor: '#1f2937', padding: '20px', borderRadius: '8px', marginTop: '20px' }}>
             
             {renderListSection(
-                'Recurring Incomes / Expenses',
+                'Recurring Incomes', // [수정] Title 변경
                 'incomes',
                 { name: 'type', amount: 'amount', start: 'startYear', end: 'endYear' }, // [수정] name -> type
                 'incomes' // 'Add' 버튼을 누를 때 사용할 폼 타입
+            )}
+            
+            {/* [추가] Recurring Expenses 리스트를 별도로 렌더링합니다. */}
+            {renderListSection(
+                'Recurring Expenses',
+                'expenses',
+                { name: 'type', amount: 'amount', start: 'startYear', end: 'endYear' },
+                'expenses' // 'Add' 버튼을 누를 때 'expenses' 타입으로 폼을 엽니다.
             )}
             
             {renderListSection(
@@ -233,11 +241,35 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
                         </h3>
                         
                         {/* --- Recurring Incomes/Expenses 폼 --- */}
-                        {type === 'incomes' && (
+                        {(type === 'incomes' || type === 'expenses') && (
                             <div style={formGridStyle}>
+                                {/* [수정] 수입/지출 토글을 먼저 표시합니다. */}
                                 <div>
-                                    <label style={formLabelStyle}>Type (e.g., CPP, OAS, Living Expenses)</label>
-                                    <input type="text" style={formInputStyle} value={item.type} onChange={e => handleFormChange('type', e.target.value)} />
+                                    <label style={formLabelStyle}>Category</label>
+                                    <select style={formInputStyle} value={item.isExpense ? 'expense' : 'income'} onChange={e => handleFormChange('isExpense', e.target.value === 'expense')}>
+                                        <option value="income">Income</option>
+                                        <option value="expense">Expense</option>
+                                    </select>
+                                </div>
+
+                                {/* [수정] isExpense 값에 따라 'Type' 필드를 다르게 표시합니다. */}
+                                <div>
+                                    {!item.isExpense ? (
+                                        <>
+                                            <label style={formLabelStyle}>Income Type</label>
+                                            <select style={formInputStyle} value={item.type} onChange={e => handleFormChange('type', e.target.value)}>
+                                                <option value="CPP">CPP</option>
+                                                <option value="OAS">OAS</option>
+                                                <option value="Pension">Pension</option>
+                                                <option value="Other Income">Other Income</option>
+                                            </select>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <label style={formLabelStyle}>Expense Type</label>
+                                            <input type="text" style={formInputStyle} value={item.type} onChange={e => handleFormChange('type', e.target.value)} placeholder="e.g., Living Expenses" />
+                                        </>
+                                    )}
                                 </div>
                                 <div>
                                     <label style={formLabelStyle}>Amount (Annual)</label>
@@ -254,13 +286,6 @@ const IncomesExpenses = ({ scenario, onUpdate }) => {
                                 <div>
                                     <label style={formLabelStyle}>Growth Rate (%)</label>
                                     <input type="number" style={formInputStyle} value={item.growthRate} onChange={e => handleFormChange('growthRate', e.target.value)} />
-                                </div>
-                                <div>
-                                    <label style={formLabelStyle}>Type</label>
-                                    <select style={formInputStyle} value={item.isExpense ? 'expense' : 'income'} onChange={e => handleFormChange('isExpense', e.target.value === 'expense')}>
-                                        <option value="income">Income</option>
-                                        <option value="expense">Expense</option>
-                                    </select>
                                 </div>
                             </div>
                         )}
