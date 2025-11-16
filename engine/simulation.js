@@ -3,12 +3,21 @@
 const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) => {
     // --- A. 초기 설정 ---
     const { startYear, endYear, birthYear, checkingMaxBalance } = scenario.settings;
-    const baseYearForInflation = 2025;
+    
+    // ★★★ [수정] 인플레이션 기준 연도 설정 (2025년) ★★★
+    const baseYearForInflation = 2025; 
+    // 시뮬레이션 로직에 영향을 주지 않기 위해 시나리오 객체를 깊은 복사합니다.
     const simulationScenario = deepCopy(scenario);
 
+    // [수정] 은퇴 시점 가치로 변환 (사용자 요청 사항 반영)
+    // 2025년에 입력한 금액이 2035년에 시작된다면, 10년치 복리 적용
     simulationScenario.incomes.forEach(item => {
         if (item.startYear > baseYearForInflation) {
             const yearsToCompound = item.startYear - baseYearForInflation;
+            // [수정] JS에서는 100을 나눌 필요가 없습니다 (이미 createApiPayload에서 처리됨).
+            // 단, data.js의 기본값이 소수점이므로, 이 로직을 그대로 사용합니다.
+            // data.js의 기본값이 2.5로 수정된 후에는 (item.growthRate || 0) / 100 로 변경해야 합니다.
+            // -> data.js가 수정되었으므로 100으로 나눕니다.
             item.amount = item.amount * Math.pow(1 + (item.growthRate || 0) / 100, yearsToCompound);
         }
     });
@@ -18,6 +27,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             item.amount = item.amount * Math.pow(1 + (item.growthRate || 0) / 100, yearsToCompound);
         }
     });
+    // ★★★ [수정] 끝 ★★★
     
     let accounts = deepCopy({
         rrsp: scenario.settings.rrsp,
@@ -79,6 +89,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         const startAccounts = deepCopy(accounts);
         let decisionLog = {};
 
+        // [수정] 미리 계산된 simulationScenario 사용
         const annualExpenses = simulationScenario.expenses.reduce((acc, exp) => (currentYear >= exp.startYear && currentYear <= (exp.endYear || endYear) ? acc + exp.amount * getInflationFactor(currentYear, exp.startYear, exp.growthRate) : acc), 0);
         const annualIncomes = simulationScenario.incomes.reduce((acc, inc) => (currentYear >= inc.startYear && currentYear <= (inc.endYear || endYear) ? acc + inc.amount * getInflationFactor(currentYear, inc.startYear, inc.growthRate) : acc), 0);
         const oneTimeEventsThisYear = scenario.oneTimeEvents.filter(e => e.year === currentYear);
@@ -93,7 +104,8 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         }
 
         tfsaContributionRoom += tfsaWithdrawalsLastYear;
-        const annualTfsaLimit = (scenario.settings.annualTfsaContribution || 0) * getInflationFactor(currentYear, startYear, scenario.settings.taxInflationRate);
+        // [수정] 100으로 나누기
+        const annualTfsaLimit = (scenario.settings.annualTfsaContribution || 0) * getInflationFactor(currentYear, startYear, scenario.settings.taxInflationRate / 100.0);
         tfsaContributionRoom += annualTfsaLimit;
         const totalCashInflow = startBalances.checking + annualIncomes + oneTimeIncome;
         const totalCashOutflow = totalRequiredSpending;
@@ -104,9 +116,11 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
 
         const totalAssets = startBalances.rrsp + startBalances.tfsa + startBalances.nonReg;
         const rrspRatio = totalAssets > 0 ? startBalances.rrsp / totalAssets : 0;
-        const { rrspBonus, tfsaPenalty } = determineStrategicParameters(age, totalAssets, rrspRatio, scenario.settings.monteCarlo.riskProfile, scenario.settings.expertMode);
+        // [수정] 100으로 나누기
+        const { rrspBonus, tfsaPenalty } = determineStrategicParameters(age, totalAssets, rrspRatio, scenario.settings.monteCarlo.riskProfile / 100.0, scenario.settings.expertMode);
         
-        const taxParametersForYear = getTaxParametersForYear(currentYear, scenario.settings.taxInflationRate, scenario.settings.province);
+        // [수정] 100으로 나누기
+        const taxParametersForYear = getTaxParametersForYear(currentYear, scenario.settings.taxInflationRate / 100.0, scenario.settings.province);
         const baseIncomeBreakdown = { otherIncome: annualIncomes };
         const yearContext = { scenario, age, startYear: currentYear, incomeBreakdown: baseIncomeBreakdown, taxParameters: taxParametersForYear };
         yearContext.scenario.settings.rrspWithdrawalBonus = rrspBonus;
@@ -152,17 +166,20 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
                 if (account.holdings[assetKey] > 0) {
                     const assetProfile = scenario.settings.assetProfiles[assetKey];
                     if(assetProfile) {
-                        const dividendAmount = account.holdings[assetKey] * (assetProfile.dividendYield / 100);
+                        // [수정] 100으로 나누기
+                        const dividendAmount = account.holdings[assetKey] * (assetProfile.dividend / 100.0);
                         let capitalChange = 0;
                         if (crashEvent && crashEvent.impact) {
                             const totalDropPercent = crashEvent.impact[assetKey] || 0;
-                            const totalDropDecimal = totalDropPercent / 100;
+                            const totalDropDecimal = totalDropPercent / 100.0;
                             const annualLossRate = Math.pow(1 - totalDropDecimal, 1 / crashEvent.duration) - 1;
                             capitalChange = account.holdings[assetKey] * annualLossRate;
                         } else {
-                            let appreciationReturn = assetProfile.appreciation / 100;
+                            // [수정] 100으로 나누기
+                            let appreciationReturn = assetProfile.growth / 100.0;
                             if (isMonteCarloRun) {
-                                appreciationReturn = generateTDistributionRandom(assetProfile.appreciation, assetProfile.volatility, 30, prng) / 100;
+                                // [수정] 100으로 나누기
+                                appreciationReturn = generateTDistributionRandom(assetProfile.growth, assetProfile.volatility, 30, prng) / 100.0;
                             }
                             capitalChange = account.holdings[assetKey] * appreciationReturn;
                         }
@@ -243,8 +260,9 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             }
         });
 
+        // [수정] 100으로 나누기
         const oasIncomeData = scenario.incomes.find(i => i.type === 'OAS');
-        const oasIncome = oasIncomeData ? oasIncomeData.amount * getInflationFactor(currentYear, oasIncomeData.startYear, oasIncomeData.growthRate) : 0;
+        const oasIncome = oasIncomeData ? oasIncomeData.amount * getInflationFactor(currentYear, oasIncomeData.startYear, oasIncomeData.growthRate / 100.0) : 0;
         
         const taxResult = calculateTaxWithClawback({
             incomeBreakdown: {
@@ -256,7 +274,8 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             netIncomeForClawback: taxableOtherIncome + totalWithdrawalsThisYear.rrsp + taxableCapitalGains + dividendIncomeThisYear * 1.38 + oasIncome,
             oasIncome: oasIncome,
             age: age,
-            taxParameters: taxParametersForYear,
+            // [수정] 100으로 나누기
+            taxParameters: getTaxParametersForYear(currentYear, scenario.settings.taxInflationRate / 100.0, scenario.settings.province),
             province: scenario.settings.province
         });
         taxBillFromLastYear = taxResult.totalTax;
@@ -312,6 +331,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             dividendIncome: dividendIncomeThisYear,
             oasClawback: taxResult.oasClawback,
             marginalTaxRate: taxResult.marginalRate,
+            // [수정] 100으로 나누기
             tfsaContributionRoomStart: tfsaContributionRoom - annualTfsaLimit,
             tfsaContributionRoomEnd: tfsaContributionRoom,
             decisionLog: decisionLog,
