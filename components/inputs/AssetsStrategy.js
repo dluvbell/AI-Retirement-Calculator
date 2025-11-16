@@ -101,6 +101,18 @@ const handleCompositionChange = (compositionType, assetKey, newValue) => {
     onUpdate('portfolio', newPortfolio);
 };
 
+// [추가] Simple Mode 클릭 시 override 플래그를 false로 설정
+const handleSimpleModeClick = () => {
+    onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: true });
+    onUpdate('advancedSettings', { ...scenario.settings.advancedSettings, tfsa: { ...scenario.settings.advancedSettings.tfsa, override: false }, rrsp: { ...scenario.settings.advancedSettings.rrsp, override: false }, nonReg: { ...scenario.settings.advancedSettings.nonReg, override: false } });
+};
+
+// [추가] Advanced Mode 클릭 시 override 플래그를 true로 설정
+const handleAdvancedModeClick = () => {
+    onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: false });
+    onUpdate('advancedSettings', { ...scenario.settings.advancedSettings, tfsa: { ...scenario.settings.advancedSettings.tfsa, override: true }, rrsp: { ...scenario.settings.advancedSettings.rrsp, override: true }, nonReg: { ...scenario.settings.advancedSettings.nonReg, override: true } });
+};
+
 // [신규] 고급 모드에서 자산/ACB 값이 변경될 때 호출되는 함수
 const handleAdvancedChange = (accountKey, assetKey, field, value) => {
     const numericValue = parseFloat(value) || 0;
@@ -161,9 +173,9 @@ const tableInputStyle = {
             {/* --- [신규] 단순/고급 모드 토글 스위치 --- */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#374151', borderRadius: '9999px', padding: '4px' }}>
-                {/* [수정] onClick 핸들러가 portfolio 객체 전체를 업데이트하도록 변경 */}
+                {/* [수정] onClick 핸들러를 새 함수로 변경 */}
                 <button
-                    onClick={() => onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: true })}
+                    onClick={handleSimpleModeClick}
                     style={{
                         padding: '6px 16px',
                         borderRadius: '9999px',
@@ -178,9 +190,9 @@ const tableInputStyle = {
                 >
                     Simple Mode
                 </button>
-                {/* [수정] onClick 핸들러가 portfolio 객체 전체를 업데이트하도록 변경 */}
+                {/* [수정] onClick 핸들러를 새 함수로 변경 */}
                 <button
-                    onClick={() => onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: false })}
+                    onClick={handleAdvancedModeClick}
                     style={{
                         padding: '6px 16px',
                         borderRadius: '9999px',
@@ -234,12 +246,12 @@ const tableInputStyle = {
                         <div>
                             <label style={labelStyle} htmlFor="nonRegTotal">Non-Registered Total</label>
                             <input
-                                type="number"
-                                id="nonRegTotal"
-                                style={inputStyle}
-                                value={scenario.settings.initialBalances.nonReg}
-                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, nonReg: parseFloat(e.target.value) || 0 })}
-                            />
+                                type: "number",
+                                id: "nonRegTotal",
+                                style: inputStyle,
+                                value: scenario.settings.initialBalances.nonReg,
+                                onChange: (e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, nonReg: parseFloat(e.target.value) || 0 })
+                            }
                         </div>
                         {/* --- [추가] ACB 비율 입력 필드 --- */}
                         <div>
