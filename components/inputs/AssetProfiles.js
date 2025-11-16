@@ -12,10 +12,10 @@ const AssetProfiles = ({ scenario, onUpdate, useSimpleMode }) => {
         };
         // 어드밴스드 모드일 때만 End Composition 데이터를 복사
         if (!useSimpleMode) {
-            // [수정] settings.advancedSettings에서 데이터를 읽어옵니다.
-            dataToEdit.rrspEndComposition = deepCopy(scenario.settings.advancedSettings.rrsp.endComposition);
-            dataToEdit.tfsaEndComposition = deepCopy(scenario.settings.advancedSettings.tfsa.endComposition);
-            dataToEdit.nonRegEndComposition = deepCopy(scenario.settings.advancedSettings.nonReg.endComposition);
+            // [수정] advancedSettings에 endComposition이 없으면 portfolio의 endComposition을 기본값으로 사용
+            dataToEdit.rrspEndComposition = deepCopy(scenario.settings.advancedSettings.rrsp.endComposition || scenario.settings.portfolio.endComposition);
+            dataToEdit.tfsaEndComposition = deepCopy(scenario.settings.advancedSettings.tfsa.endComposition || scenario.settings.portfolio.endComposition);
+            dataToEdit.nonRegEndComposition = deepCopy(scenario.settings.advancedSettings.nonReg.endComposition || scenario.settings.portfolio.endComposition);
         }
         setEditingData(dataToEdit);
         setIsOpen(true);
