@@ -187,8 +187,9 @@ const validateScenario = (scenario) => {
     if (settings.portfolio.useSimpleMode) {
         const startSum = Object.values(settings.portfolio.startComposition).reduce((s, v) => s + v, 0);
         const endSum = Object.values(settings.portfolio.endComposition).reduce((s, v) => s + v, 0);
-        if (Math.abs(startSum - 1.0) > 0.001) errors.push("Simple Mode 'Start Composition' percentages must add up to 100%.");
-        if (Math.abs(endSum - 1.0) > 0.001) errors.push("Simple Mode 'End Composition' percentages must add up to 100%.");
+        // [수정] 합계를 1.0이 아닌 100.0과 비교합니다.
+        if (Math.abs(startSum - 100.0) > 0.001) errors.push("Simple Mode 'Start Composition' percentages must add up to 100%.");
+        if (Math.abs(endSum - 100.0) > 0.001) errors.push("Simple Mode 'End Composition' percentages must add up to 100%.");
     }
 
     // 4. 자산 프로파일 검사
