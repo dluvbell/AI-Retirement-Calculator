@@ -64,12 +64,13 @@ const CompositionInputs = ({ title, composition, onCompositionChange }) => {
 const AssetsStrategy = ({ scenario, onUpdate }) => {
 
    // scenario 객체에서 이 컴포넌트가 사용할 설정 값들을 미리 꺼내옵니다.
-    const { useSimpleMode } = scenario.settings;
+    const { useSimpleMode } = scenario.settings.portfolio; // [수정] useSimpleMode는 portfolio 객체 내부에 있습니다.
 
 // [신규] 단순 모드에서 계좌 총액이 변경될 때 호출되는 함수
 const handleTotalChange = (accountKey, newTotalValue) => {
     const newTotal = parseFloat(newTotalValue) || 0;
-    const account = scenario.settings[accountKey];
+    // [수정] account 객체를 settings.advancedSettings에서 가져옵니다.
+    const account = scenario.settings.advancedSettings[accountKey];
 
     let composition = getAccountComposition(account.holdings);
     if (Object.keys(composition).length === 0) {
@@ -82,7 +83,8 @@ const handleTotalChange = (accountKey, newTotalValue) => {
         newHoldings[assetKey] = newTotal * percentage;
     }
 
-    onUpdate(accountKey, { ...account, holdings: newHoldings });
+    // [수정] App.js의 onUpdate가 dot notation을 처리하도록 수정된 경로로 호출합니다.
+    onUpdate(`advancedSettings.${accountKey}`, { ...account, holdings: newHoldings });
 };
 
 // [신규] 포트폴리오 배분율(%)이 변경될 때 호출되는 함수
@@ -102,16 +104,18 @@ const handleCompositionChange = (compositionType, assetKey, newValue) => {
 // [신규] 고급 모드에서 자산/ACB 값이 변경될 때 호출되는 함수
 const handleAdvancedChange = (accountKey, assetKey, field, value) => {
     const numericValue = parseFloat(value) || 0;
-    const account = scenario.settings[accountKey];
+    // [수정] account 객체를 settings.advancedSettings에서 가져옵니다.
+    const account = scenario.settings.advancedSettings[accountKey];
 
     const newAccountData = {
         ...account,
-        [field]: {
-            ...account[field],
+        [field]: { // 'field' is 'holdings' or 'acb'
+            ...account[field], // [수정] ...account[field]
             [assetKey]: numericValue
         }
     };
-    onUpdate(accountKey, newAccountData);
+    // [수정] App.js의 onUpdate가 dot notation을 처리하도록 수정된 경로로 호출합니다.
+    onUpdate(`advancedSettings.${accountKey}`, newAccountData);
 };
 
     // 공통적으로 사용할 스타일 객체들을 정의합니다.
@@ -159,7 +163,7 @@ const tableInputStyle = {
             <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#374151', borderRadius: '9999px', padding: '4px' }}>
                 {/* 단순 모드 버튼 */}
                 <button
-                    onClick={() => onUpdate('useSimpleMode', true)}
+                    onClick={() => onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: true })}
                     style={{
                         padding: '6px 16px',
                         borderRadius: '9999px',
@@ -176,7 +180,7 @@ const tableInputStyle = {
                 </button>
                 {/* 고급 모드 버튼 */}
                 <button
-                    onClick={() => onUpdate('useSimpleMode', false)}
+                    onClick={() => onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: false })}
                     style={{
                         padding: '6px 16px',
                         borderRadius: '9999px',
@@ -213,7 +217,7 @@ const tableInputStyle = {
                                 type="number"
                                 id="rrspTotal"
                                 style={inputStyle}
-                                value={getAccountTotal(scenario.settings.rrsp.holdings)}
+                                value={getAccountTotal(scenario.settings.advancedSettings.rrsp.holdings)}
                                 onChange={(e) => handleTotalChange('rrsp', e.target.value)}
                             />
                         </div>
@@ -223,7 +227,7 @@ const tableInputStyle = {
                                 type="number"
                                 id="tfsaTotal"
                                 style={inputStyle}
-                                value={getAccountTotal(scenario.settings.tfsa.holdings)}
+                                value={getAccountTotal(scenario.settings.advancedSettings.tfsa.holdings)}
                                 onChange={(e) => handleTotalChange('tfsa', e.target.value)}
                             />
                         </div>
@@ -233,7 +237,7 @@ const tableInputStyle = {
                                 type="number"
                                 id="nonRegTotal"
                                 style={inputStyle}
-                                value={getAccountTotal(scenario.settings.nonReg.holdings)}
+                                value={getAccountTotal(scenario.settings.advancedSettings.nonReg.holdings)}
                                 onChange={(e) => handleTotalChange('nonReg', e.target.value)}
                             />
                         </div>
@@ -251,8 +255,8 @@ const tableInputStyle = {
                                 type="number"
                                 id="nonRegAcbRatio"
                                 style={inputStyle}
-                                value={scenario.settings.nonRegAcbRatio}
-                                onChange={(e) => onUpdate('nonRegAcbRatio', parseFloat(e.target.value) || 0)}
+                                value={scenario.settings.initialBalances.nonRegAcbRatio}
+                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, nonRegAcbRatio: parseFloat(e.target.value) || 0 })}
                             />
                         </div>
                         <div>
@@ -261,8 +265,8 @@ const tableInputStyle = {
                                 type="number"
                                 id="checkingBalance"
                                 style={inputStyle}
-                                value={scenario.settings.checkingBalance}
-                                onChange={(e) => onUpdate('checkingBalance', parseFloat(e.target.value) || 0)}
+                                value={scenario.settings.initialBalances.checking}
+                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, checking: parseFloat(e.target.value) || 0 })}
                             />
                         </div>
                         {/* ★★★ 수정된 부분 시작 ★★★ */}
@@ -279,8 +283,8 @@ const tableInputStyle = {
                                 type="number"
                                 id="checkingMaxBalance"
                                 style={inputStyle}
-                                value={scenario.settings.checkingMaxBalance}
-                                onChange={(e) => onUpdate('checkingMaxBalance', parseFloat(e.target.value) || 0)}
+                                value={scenario.settings.initialBalances.maxChecking}
+                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, maxChecking: parseFloat(e.target.value) || 0 })}
                             />
                         </div>
                         {/* ★★★ 수정된 부분 끝 ★★★ */}
@@ -321,14 +325,14 @@ const tableInputStyle = {
                                                     <input
                                                         type="number"
                                                         style={tableInputStyle}
-                                                        value={scenario.settings[acctKey]?.holdings?.[assetKey] || 0}
+                                                        value={scenario.settings.advancedSettings[acctKey]?.holdings?.[assetKey] || 0}
                                                         onChange={(e) => handleAdvancedChange(acctKey, assetKey, 'holdings', e.target.value)}
                                                     />
                                                     <label style={{fontSize: '12px', color: '#9ca3af', marginTop: '4px'}}>ACB</label>
                                                     <input
                                                         type="number"
                                                         style={tableInputStyle}
-                                                        value={scenario.settings[acctKey]?.acb?.[assetKey] || 0}
+                                                        value={scenario.settings.advancedSettings[acctKey]?.acb?.[assetKey] || 0}
                                                         onChange={(e) => handleAdvancedChange(acctKey, assetKey, 'acb', e.target.value)}
                                                     />
                                                 </div>
@@ -339,7 +343,7 @@ const tableInputStyle = {
                                                     <input
                                                         type="number"
                                                         style={tableInputStyle}
-                                                        value={scenario.settings[acctKey]?.holdings?.[assetKey] || 0}
+                                                        value={scenario.settings.advancedSettings[acctKey]?.holdings?.[assetKey] || 0}
                                                         onChange={(e) => handleAdvancedChange(acctKey, assetKey, 'holdings', e.target.value)}
                                                     />
                                                 </div>
