@@ -63,8 +63,8 @@ const CompositionInputs = ({ title, composition, onCompositionChange }) => {
 
 const AssetsStrategy = ({ scenario, onUpdate }) => {
 
-   // scenario 객체에서 이 컴포넌트가 사용할 설정 값들을 미리 꺼내옵니다.
-    const { useSimpleMode } = scenario.settings.portfolio; // [수정] useSimpleMode는 portfolio 객체 내부에 있습니다.
+   // [수정] scenario.settings.portfolio에서 useSimpleMode를 읽어옵니다.
+    const { useSimpleMode } = scenario.settings.portfolio;
 
 // [신규] 단순 모드에서 계좌 총액이 변경될 때 호출되는 함수
 const handleTotalChange = (accountKey, newTotalValue) => {
@@ -161,7 +161,7 @@ const tableInputStyle = {
             {/* --- [신규] 단순/고급 모드 토글 스위치 --- */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#374151', borderRadius: '9999px', padding: '4px' }}>
-                {/* 단순 모드 버튼 */}
+                {/* [수정] onClick 핸들러가 portfolio 객체 전체를 업데이트하도록 변경 */}
                 <button
                     onClick={() => onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: true })}
                     style={{
@@ -178,7 +178,7 @@ const tableInputStyle = {
                 >
                     Simple Mode
                 </button>
-                {/* 고급 모드 버튼 */}
+                {/* [수정] onClick 핸들러가 portfolio 객체 전체를 업데이트하도록 변경 */}
                 <button
                     onClick={() => onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: false })}
                     style={{
