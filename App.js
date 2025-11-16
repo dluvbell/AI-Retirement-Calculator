@@ -387,22 +387,6 @@ const App = () => {
                     )}
                 </div>
 
-                <div className="card-section">
-                    <button onClick={() => toggleSection('expert')} className="w-full flex items-center justify-between text-lg font-bold text-left p-4 transition-colors duration-200 hover:bg-gray-700">
-                        <span>Expert Settings</span>
-                        <svg style={{ transform: openSections.expert ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                    {openSections.expert && (
-                        <div className="p-5">
-                            <ExpertSettings
-                                scenario={activeScenario}
-                                onUpdate={handleSettingsChange}
-                            />
-                        </div>
-                    )}
-                </div>
                <div className="bg-gray-800 p-5 rounded-lg border border-gray-700">
                 <h2 className="text-xl font-bold mb-4">Run Simulations</h2>
                 <div className="flex gap-4 items-end flex-wrap">
