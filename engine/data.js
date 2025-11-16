@@ -340,8 +340,16 @@ const createApiPayload = (scenario) => {
     };
 
     // [AI 2.0 서버 오류 수정]
-    // Non-Reg 계좌 생성에 필수적인 ACB(투자 원금) 데이터를 payload에 추가합니다.
-    payload.non_reg_acb = scenario.settings.advancedSettings.nonReg.acb;
+    // Non-Reg 계좌 생성에 필수적인 ACB(투자 원금) 데이터를 Python 키로 매핑하여 payload에 추가합니다.
+    const mapped_non_reg_acb = {};
+    const acb_js = scenario.settings.advancedSettings.nonReg.acb;
+    for (const key_js in acb_js) {
+        const key_py = assetProfileMap[key_js]; // 'growth' -> 'stocks_growth'
+        if (key_py) {
+            mapped_non_reg_acb[key_py] = acb_js[key_js];
+        }
+    }
+    payload.non_reg_acb = mapped_non_reg_acb;
 
     return payload;
 };
