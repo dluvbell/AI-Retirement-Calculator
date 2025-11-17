@@ -291,4 +291,60 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         balances.checking += dividendIncomeThisYear;
         const temporaryMaxBalance = checkingMaxBalance + taxBillFromLastYear;
 
-        if (balances.checking > temporaryMaxBala
+        if (balances.checking > temporaryMaxBalance) {
+            let surplus = balances.checking - temporaryMaxBalance;
+            const toTfsa = Math.min(surplus, tfsaContributionRoom);
+            if (toTfsa > 0) {
+                const comp = getAccountComposition(accounts.tfsa.holdings);
+                const targetComp = Object.keys(comp).length > 0 ? comp : calculateCurrentComposition(scenario, currentYear);
+                for (const assetKey in targetComp) { accounts.tfsa.holdings[assetKey] = (accounts.tfsa.holdings[assetKey] || 0) + toTfsa * (targetComp[assetKey] / 100); }
+                surplus -= toTfsa;
+                tfsaContributionRoom -= toTfsa;
+            }
+            if (surplus > 0) {
+                const comp = getAccountComposition(accounts.nonReg.holdings);
+                const targetComp = Object.keys(comp).length > 0 ? comp : calculateCurrentComposition(scenario, currentYear);
+                for (const assetKey in targetComp) {
+                    const amountToAdd = surplus * (targetComp[assetKey] / 100);
+                    accounts.nonReg.holdings[assetKey] = (accounts.nonReg.holdings[assetKey] || 0) + amountToAdd;
+                    accounts.nonReg.acb[assetKey] = (accounts.nonReg.acb[assetKey] || 0) + amountToAdd;
+                }
+            }
+            balances.checking = temporaryMaxBalance;
+        }
+
+        balances.rrsp = getAccountTotal(accounts.rrsp.holdings);
+        balances.tfsa = getAccountTotal(accounts.tfsa.holdings);
+        balances.nonReg = getAccountTotal(accounts.nonReg.holdings);
+        
+        yearlyData.push({
+            year: currentYear,
+            age: age,
+            startTotalBalance: getTotalAssets(startBalances),
+            endTotalBalance: getTotalAssets(balances),
+            startBalances: startBalances,
+            endBalances: deepCopy(balances),
+            startAccounts: startAccounts,
+            endAccounts: deepCopy(accounts),
+            taxDetails: taxResult.details,
+            taxableIncomeForYear: taxResult.details.taxableIncome,
+            taxableRegularIncome: taxableOtherIncome,
+            totalIncome: annualIncomes + oneTimeIncome,
+            totalExpense: annualExpenses + oneTimeExpense,
+            taxPayable: taxBillFromLastYear,
+            rrifMin: rrifMin,
+            totalWithdrawals: totalWithdrawalsThisYear,
+            withdrawalCapitalGain: withdrawalCapitalGain,
+            rebalancingCapitalGain: rebalancingCapitalGain,
+            dividendIncome: dividendIncomeThisYear,
+            oasClawback: taxResult.oasClawback,
+            marginalTaxRate: taxResult.marginalRate,
+            // [수정] 100으로 나누기
+            tfsaContributionRoomStart: tfsaContributionRoom - annualTfsaLimit,
+            tfsaContributionRoomEnd: tfsaContributionRoom,
+            decisionLog: decisionLog,
+        });
+    } 
+
+   return { status: 'SUCCESS', yearlyData, fundDepletionYear };
+};
