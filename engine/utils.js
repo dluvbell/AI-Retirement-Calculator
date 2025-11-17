@@ -10,7 +10,8 @@
  * 숫자를 통화 형식 (예: $1,234.56)으로 포맷합니다.
  * ResultsSection.js에서 사용합니다.
  */
-const formatCurrency = (value, decimals = 2) => {
+// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+var formatCurrency = (value, decimals = 2) => {
     const num = Number(value);
     if (isNaN(num)) {
         return '$0.00';
@@ -27,7 +28,8 @@ const formatCurrency = (value, decimals = 2) => {
  * 객체나 배열을 깊은 복사(deep copy)합니다.
  * App.js에서 시나리오 복사 시 사용합니다.
  */
-const deepCopy = (obj, visited = new WeakMap()) => {
+// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+var deepCopy = (obj, visited = new WeakMap()) => {
     if (obj === null || typeof obj !== 'object') return obj;
     if (visited.has(obj)) return visited.get(obj);
     if (obj instanceof Date) return new Date(obj.getTime());
@@ -46,53 +48,11 @@ const deepCopy = (obj, visited = new WeakMap()) => {
 };
 
 /**
- * [추가] 계좌의 총액을 계산합니다.
- * (AssetsStrategy.js, simulation.js에서 공통 사용)
- */
-const getAccountTotal = (holdings) => {
-    if (!holdings || typeof holdings !== 'object') {
-        return 0;
-    }
-    return Object.values(holdings).reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
-};
-
-/**
- * [추가] 계좌의 자산 배분 비율(%)을 계산합니다.
- * (AssetsStrategy.js에서 공통 사용)
- */
-const getAccountComposition = (holdings) => {
-    const total = getAccountTotal(holdings);
-    if (total === 0) {
-        return {}; // 0으로 나누기 방지
-    }
-    const composition = {};
-    for (const key in holdings) {
-        composition[key] = (holdings[key] / total) * 100;
-    }
-    return composition;
-};
-
-/**
- * 시나리오 객체를 JSON 파일로 내보냅니다.
+ * .json 파일을 읽어 시나리오 객체로 변환합니다.
  * App.js에서 사용합니다.
  */
-const exportScenarioToJSON = (scenario) => {
-    const dataStr = JSON.stringify(scenario, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    
-    const exportFileDefaultName = `${scenario.name.replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-};
-
-/**
- * JSON 파일로부터 시나리오 객체를 불러옵니다.
- * App.js에서 사용합니다.
- */
-const importScenarioFromJSON = (file, callback) => {
+// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+var importScenario = (file, callback) => {
     const reader = new FileReader();
     reader.onload = (event) => {
         try {
@@ -118,7 +78,8 @@ const importScenarioFromJSON = (file, callback) => {
  * 시뮬레이션 결과 로그를 CSV로 변환합니다.
  * App.js에서 사용합니다.
  */
-const exportToCSV = (logData, fileName) => {
+// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+var exportToCSV = (logData, fileName) => {
     if (!logData || logData.length === 0) {
         alert("No data to export.");
         return;
@@ -127,15 +88,18 @@ const exportToCSV = (logData, fileName) => {
     const headers = Object.keys(logData[0]).join(',');
     const rows = logData.map(row => 
         Object.values(row).map(val => 
-            typeof val === 'object' ? `\"${JSON.stringify(val).replace(/\"/g, '\"\"')}\"` : val
+            typeof val === 'object' ? `\"${JSON.stringify(val).replace(/"/g, '\"\"')}\"` : val
         ).join(',')
     );
 
     const csvContent = [headers, ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${fileName}.csv`;
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(link.href);
+    document.body.removeChild(link);
 };
