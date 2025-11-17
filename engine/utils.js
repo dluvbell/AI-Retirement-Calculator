@@ -10,7 +10,7 @@
  * 숫자를 통화 형식 (예: $1,234.56)으로 포맷합니다.
  * ResultsSection.js에서 사용합니다.
  */
-// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var formatCurrency = (value, decimals = 2) => {
     const num = Number(value);
     if (isNaN(num)) {
@@ -28,7 +28,7 @@ var formatCurrency = (value, decimals = 2) => {
  * 객체나 배열을 깊은 복사(deep copy)합니다.
  * App.js에서 시나리오 복사 시 사용합니다.
  */
-// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var deepCopy = (obj, visited = new WeakMap()) => {
     if (obj === null || typeof obj !== 'object') return obj;
     if (visited.has(obj)) return visited.get(obj);
@@ -51,7 +51,7 @@ var deepCopy = (obj, visited = new WeakMap()) => {
  * .json 파일을 읽어 시나리오 객체로 변환합니다.
  * App.js에서 사용합니다.
  */
-// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var importScenario = (file, callback) => {
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -78,7 +78,7 @@ var importScenario = (file, callback) => {
  * 시뮬레이션 결과 로그를 CSV로 변환합니다.
  * App.js에서 사용합니다.
  */
-// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var exportToCSV = (logData, fileName) => {
     if (!logData || logData.length === 0) {
         alert("No data to export.");
