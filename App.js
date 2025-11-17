@@ -223,8 +223,11 @@ const App = () => {
     }
 
     return (
-    <div style={{display: 'flex', minHeight: '100vh', backgroundColor: '#111827', color: 'white'}}>
-        <div style={{width: '400px', borderRight: '1px solid #374151', padding: '20px', overflowY: 'auto', height: '100vh'}}>
+    // ★★★ [레이아웃 수정] 'display: flex'를 제거하여 2단 분리를 없앱니다. ★★★
+    <div style={{minHeight: '100vh', backgroundColor: '#111827', color: 'white'}}>
+        
+        {/* ★★★ [레이아웃 수정] width, border, height, overflow를 제거하고, maxWidth와 margin을 주어 중앙 정렬합니다. ★★★ */}
+        <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <h2 style={{fontSize: '24px', fontWeight: '600', marginBottom: '20px'}}>Retirement Planner</h2>
             <BasicSettings scenario={activeScenario} onUpdate={handleSettingsChange} />
             <AssetsStrategy scenario={activeScenario} onUpdate={handleSettingsChange} />
@@ -232,7 +235,8 @@ const App = () => {
             <IncomesExpenses scenario={activeScenario} onUpdate={handleSettingsChange} />
         </div>
         
-        <div style={{flex: 1, padding: '20px', overflowY: 'auto', height: '100vh'}}>
+        {/* ★★★ [레이아웃 수정] flex: 1, height, overflow를 제거하고, maxWidth와 margin을 주어 중앙 정렬합니다. ★★★ */}
+        <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <ScenarioManager 
                 scenarios={scenarios}
                 activeScenarioId={activeScenarioId}
