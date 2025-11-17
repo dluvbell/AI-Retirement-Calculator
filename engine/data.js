@@ -109,7 +109,7 @@ const DEFAULT_MONTE_CARLO = {
  * @param {string} name - 새 시나리오의 이름
  * @returns {object} - 시나리오 기본값이 채워진 객체
  */
-// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var createNewScenario = (name) => {
     const currentYear = new Date().getFullYear();
     const birthYear = 1980;
@@ -162,7 +162,7 @@ var createNewScenario = (name) => {
  * @param {object} scenario - 검사할 시나리오 객체
  * @returns {object} - { isValid: boolean, errors: string[] }
  */
-// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var validateScenario = (scenario) => {
     const errors = [];
     const settings = scenario.settings;
@@ -216,7 +216,7 @@ var validateScenario = (scenario) => {
  * @param {object} scenario - 프론트엔드의 활성 시나리오 객체
  * @returns {object} - Python 서버의 /simulate 엔드포인트로 전송될 JSON 객체
  */
-// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var createApiPayload = (scenario) => {
     
     // 1. 프론트엔드 키(JS)를 백엔드 키(Python)로 매핑합니다.
@@ -229,7 +229,7 @@ var createApiPayload = (scenario) => {
         gic: 'gic'
     };
     
-    // 2. [수정] 자산 프로파일 변환 (이름 매핑 및 100으로 나누기)
+    // 2. [퍼센트 버그 수정] 자산 프로파일 변환 (이름 매핑 및 100으로 나누기)
     const mappedAssetProfiles = {};
     for (const key_js in scenario.settings.assetProfiles) {
         const key_py = assetProfileMap[key_js]; // JS 키를 Python 키로 변환
@@ -240,7 +240,6 @@ var createApiPayload = (scenario) => {
                 growth: (profile.growth || 0) / 100.0,
                 dividend: (profile.dividend || 0) / 100.0,
                 volatility: (profile.volatility || 0) / 100.0,
-                // Python 백엔드가 기대하는 필드 이름으로 수정
                 dividend_growth_rate: (profile.dividend_growth || 0) / 100.0
             };
         }
@@ -256,46 +255,41 @@ var createApiPayload = (scenario) => {
             if (key_py) {
                 mappedAdvancedAssets[acctKey][key_py] = advancedSettings[acctKey].override 
                     ? advancedSettings[acctKey].holdings[key_js]
-                    : 0; // override가 꺼져있으면 0으로 보냄 (백엔드 로직 간소화)
+                    : 0; 
             }
         }
     });
     
-    // 4. [수정] 간단 모드(글라이드패스) 변환 (이름 매핑 및 100으로 나누기)
+    // 4. [퍼센트 버그 수정] 간단 모드(글라이드패스) 변환 (이름 매핑 및 100으로 나누기)
     const mapGlidePath = (composition) => {
         const mapped = {};
         for (const key_js in composition) {
             const key_py = assetProfileMap[key_js]; // JS 키를 Python 키로 변환
             if (key_py) {
-                // [수정] 50 -> 0.5
-                mapped[key_py] = (composition[key_js] || 0) / 100.0;
+                mapped[key_py] = (composition[key_js] || 0) / 100.0; // 50 -> 0.5
             }
         }
         return mapped;
     };
 
     // 5. 일회성 이벤트 변환 (세금 정보 포함)
-    // [AI 2.0 서버 오류 수정]
-    // taxationType과 acb 필드를 포함하도록 수정합니다.
     const mappedEvents = scenario.settings.oneTimeEvents.map(event => ({
         year: event.year,
         amount: event.amount,
         type: event.type,
-        // 아래 두 필드가 누락되어 500 오류가 발생했었습니다.
         taxationType: event.taxationType || (event.type === 'income' ? 'nonTaxable' : 'n/a'),
         acb: event.acb || 0
     }));
 
-    // ★★★ [버그 수정] birthYear를 가져와서 수입/지출 항목의 연도를 나이로 변환 ★★★
+    // ★★★ [수입/지출 $0 버그 수정] birthYear를 가져와서 '연도'를 '나이'로 변환 ★★★
     const birthYear = scenario.settings.birthYear;
 
     // 6. 최종 페이로드 조립
     const payload = {
         // 기본 정보
         start_age: scenario.settings.startYear - scenario.settings.birthYear,
-        retirement_age: scenario.settings.startYear - scenario.settings.birthYear, // 은퇴 후 시뮬레이션
+        retirement_age: scenario.settings.startYear - scenario.settings.birthYear,
         end_age: scenario.settings.endYear - scenario.settings.birthYear,
-        // [수정] generalInflation 값을 100으로 나누어 전송
         pre_retirement_inflation: (scenario.settings.generalInflation || 0) / 100.0, 
         
         // 초기 자산
@@ -308,8 +302,7 @@ var createApiPayload = (scenario) => {
         chequing_min: scenario.settings.initialBalances.minChecking,
         chequing_max: scenario.settings.initialBalances.maxChecking,
 
-        // 수입/지출/이벤트
-        // [버그 수정] start_year와 end_year를 '연도'가 아닌 '나이'로 변환하여 전송
+        // [수입/지출 $0 버그 수정] start_year와 end_year를 '나이'로 변환하여 전송
         income_items: scenario.settings.incomes.map(item => ({
             id: item.id,
             type: item.type,
@@ -335,34 +328,29 @@ var createApiPayload = (scenario) => {
         mode: scenario.settings.portfolio.useSimpleMode ? "simple" : "advanced",
         glide_path_start: mapGlidePath(scenario.settings.portfolio.startComposition),
         glide_path_end: mapGlidePath(scenario.settings.portfolio.endComposition),
-        advanced_assets: mappedAdvancedAssets, // (Python 서버는 mode에 따라 이 값을 무시하거나 사용함)
+        advanced_assets: mappedAdvancedAssets, 
 
         // 기타 설정
         rebalancing: {
-            enabled: scenario.settings.rebalanceThreshold === 0, // 0일 때만 매년 리밸런싱
+            enabled: scenario.settings.rebalanceThreshold === 0, 
             frequency_years: 1
         },
         runs: scenario.settings.monteCarlo.simulationCount
     };
 
-    // [수정] Non-Reg ACB 데이터를 모드에 따라 다르게 생성합니다.
+    // [퍼센트 버그 수정] Non-Reg ACB 데이터를 모드에 따라 다르게 생성
     const mapped_non_reg_acb = {};
     if (scenario.settings.portfolio.useSimpleMode) {
-        // --- 단순 모드 (Simple Mode) ---
-        // initialBalances와 startComposition을 기반으로 ACB를 동적 계산
         const total_non_reg_value = scenario.settings.initialBalances.nonReg || 0;
         const acb_ratio = (scenario.settings.initialBalances.nonRegAcbRatio || 0) / 100.0;
         const total_acb = total_non_reg_value * acb_ratio;
         const start_composition = scenario.settings.portfolio.startComposition;
-        
-        // startComposition의 총합이 0이 아닐 경우 (0으로 나누기 방지)
         const total_comp_ratio = Object.values(start_composition).reduce((s, v) => s + v, 0);
 
         for (const key_js in start_composition) {
             const key_py = assetProfileMap[key_js];
             if (key_py) {
                 if (total_comp_ratio > 0) {
-                    // ACB를 시작 포트폴리오 비율대로 분배
                     const asset_ratio = (start_composition[key_js] || 0) / total_comp_ratio;
                     mapped_non_reg_acb[key_py] = total_acb * asset_ratio;
                 } else {
@@ -370,18 +358,15 @@ var createApiPayload = (scenario) => {
                 }
             }
         }
-        // 만약 start_composition이 비어있다면, 첫 번째 자산에 ACB를 몰아넣음 (엣지 케이스)
         if (total_comp_ratio === 0 && total_acb > 0) {
              const first_py_key = assetProfileMap[ASSET_KEYS[0]];
              if (first_py_key) mapped_non_reg_acb[first_py_key] = total_acb;
         }
 
     } else {
-        // --- 고급 모드 (Advanced Mode) ---
-        // 기존 로직: advancedSettings에서 직접 ACB 값을 가져옴
         const acb_js = scenario.settings.advancedSettings.nonReg.acb;
         for (const key_js in acb_js) {
-            const key_py = assetProfileMap[key_js]; // 'growth' -> 'stocks_growth'
+            const key_py = assetProfileMap[key_js]; 
             if (key_py) {
                 mapped_non_reg_acb[key_py] = acb_js[key_js];
             }
