@@ -283,6 +283,9 @@ const createApiPayload = (scenario) => {
         acb: event.acb || 0
     }));
 
+    // ★★★ [버그 수정] birthYear를 가져와서 수입/지출 항목의 연도를 나이로 변환 ★★★
+    const birthYear = scenario.settings.birthYear;
+
     // 6. 최종 페이로드 조립
     const payload = {
         // 기본 정보
@@ -303,23 +306,21 @@ const createApiPayload = (scenario) => {
         chequing_max: scenario.settings.initialBalances.maxChecking,
 
         // 수입/지출/이벤트
-        // [KeyError: 'start_year' 수정]
-        // [수정] ...item 대신 Python이 요구하는 키만 명시적으로 전달합니다.
-        // [수정] growthRate를 100으로 나누어 전송 (예: 2.5 -> 0.025)
+        // [버그 수정] start_year와 end_year를 '연도'가 아닌 '나이'로 변환하여 전송
         income_items: scenario.settings.incomes.map(item => ({
             id: item.id,
             type: item.type,
             amount: item.amount,
-            start_year: item.startYear,
-            end_year: item.endYear,
+            start_year: item.startYear - birthYear, // (예: 2035 -> 55)
+            end_year: item.endYear - birthYear,     // (예: 2085 -> 105)
             growth_rate: (item.growthRate || 0) / 100.0
         })),
         expense_items: scenario.settings.expenses.map(item => ({
             id: item.id,
             type: item.type,
             amount: item.amount,
-            start_year: item.startYear,
-            end_year: item.endYear,
+            start_year: item.startYear - birthYear, // (예: 2035 -> 55)
+            end_year: item.endYear - birthYear,     // (예: 2085 -> 105)
             growth_rate: (item.growthRate || 0) / 100.0
         })),
         one_time_events: mappedEvents,
