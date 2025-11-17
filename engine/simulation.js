@@ -29,32 +29,36 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
     });
     // ★★★ [수정] 끝 ★★★
     
-    let accounts = deepCopy({
-        rrsp: scenario.settings.rrsp,
-        tfsa: scenario.settings.tfsa,
-        nonReg: scenario.settings.nonReg
-    });
+    // ★★★ [버그 수정] accounts가 advancedSettings를 참조하도록 수정 ★★★
+    let accounts = deepCopy(scenario.settings.advancedSettings);
     
+    // [버그 수정] balances가 simple/advanced 모드에 따라 올바른 초기값을 갖도록 수정
     let balances = {
-        rrsp: getAccountTotal(accounts.rrsp.holdings),
-        tfsa: getAccountTotal(accounts.tfsa.holdings),
-        nonReg: getAccountTotal(accounts.nonReg.holdings),
-        checking: scenario.settings.checkingBalance,
+        checking: scenario.settings.initialBalances.checking,
+        rrsp: 0,
+        tfsa: 0,
+        nonReg: 0
     };
 
-    if (scenario.settings.useSimpleMode) {
+    if (scenario.settings.portfolio.useSimpleMode) {
+        // --- 단순 모드 ---
+        // initialBalances의 총액을 사용
+        balances.rrsp = scenario.settings.initialBalances.rrsp;
+        balances.tfsa = scenario.settings.initialBalances.tfsa;
+        balances.nonReg = scenario.settings.initialBalances.nonReg;
+        
         const simpleComposition = scenario.settings.portfolio.startComposition;
         ['rrsp', 'tfsa', 'nonReg'].forEach(acctKey => {
-            const totalValue = getAccountTotal(accounts[acctKey].holdings);
+            const totalValue = balances[acctKey]; // (수정) initialBalances 값 사용
             const newHoldings = {};
             for (const assetKey in simpleComposition) {
                 newHoldings[assetKey] = totalValue * (simpleComposition[assetKey] / 100);
             }
             accounts[acctKey].holdings = newHoldings;
+            
             if (acctKey === 'nonReg') {
-                const totalValue = getAccountTotal(accounts.nonReg.holdings);
-                const totalAcb = totalValue * (scenario.settings.nonRegAcbRatio / 100);
-                
+                // (수정) initialBalances.nonRegAcbRatio 사용
+                const totalAcb = totalValue * (scenario.settings.initialBalances.nonRegAcbRatio / 100);
                 const newAcb = {};
                 for (const assetKey in simpleComposition) {
                     newAcb[assetKey] = totalAcb * (simpleComposition[assetKey] / 100);
@@ -62,10 +66,14 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
                 accounts.nonReg.acb = newAcb;
             }
         });
+    } else {
+        // --- 고급 모드 ---
+        // advancedSettings의 holdings 총액을 사용
         balances.rrsp = getAccountTotal(accounts.rrsp.holdings);
         balances.tfsa = getAccountTotal(accounts.tfsa.holdings);
         balances.nonReg = getAccountTotal(accounts.nonReg.holdings);
     }
+    // ★★★ [버그 수정] 끝 ★★★
 
     if (getTotalAssets(balances) <= 0) {
         return { 
@@ -283,60 +291,4 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         balances.checking += dividendIncomeThisYear;
         const temporaryMaxBalance = checkingMaxBalance + taxBillFromLastYear;
 
-        if (balances.checking > temporaryMaxBalance) {
-            let surplus = balances.checking - temporaryMaxBalance;
-            const toTfsa = Math.min(surplus, tfsaContributionRoom);
-            if (toTfsa > 0) {
-                const comp = getAccountComposition(accounts.tfsa.holdings);
-                const targetComp = Object.keys(comp).length > 0 ? comp : calculateCurrentComposition(scenario, currentYear);
-                for (const assetKey in targetComp) { accounts.tfsa.holdings[assetKey] = (accounts.tfsa.holdings[assetKey] || 0) + toTfsa * (targetComp[assetKey] / 100); }
-                surplus -= toTfsa;
-                tfsaContributionRoom -= toTfsa;
-            }
-            if (surplus > 0) {
-                const comp = getAccountComposition(accounts.nonReg.holdings);
-                const targetComp = Object.keys(comp).length > 0 ? comp : calculateCurrentComposition(scenario, currentYear);
-                for (const assetKey in targetComp) {
-                    const amountToAdd = surplus * (targetComp[assetKey] / 100);
-                    accounts.nonReg.holdings[assetKey] = (accounts.nonReg.holdings[assetKey] || 0) + amountToAdd;
-                    accounts.nonReg.acb[assetKey] = (accounts.nonReg.acb[assetKey] || 0) + amountToAdd;
-                }
-            }
-            balances.checking = temporaryMaxBalance;
-        }
-
-        balances.rrsp = getAccountTotal(accounts.rrsp.holdings);
-        balances.tfsa = getAccountTotal(accounts.tfsa.holdings);
-        balances.nonReg = getAccountTotal(accounts.nonReg.holdings);
-        
-        yearlyData.push({
-            year: currentYear,
-            age: age,
-            startTotalBalance: getTotalAssets(startBalances),
-            endTotalBalance: getTotalAssets(balances),
-            startBalances: startBalances,
-            endBalances: deepCopy(balances),
-            startAccounts: startAccounts,
-            endAccounts: deepCopy(accounts),
-            taxDetails: taxResult.details,
-            taxableIncomeForYear: taxResult.details.taxableIncome,
-            taxableRegularIncome: taxableOtherIncome,
-            totalIncome: annualIncomes + oneTimeIncome,
-            totalExpense: annualExpenses + oneTimeExpense,
-            taxPayable: taxBillFromLastYear,
-            rrifMin: rrifMin,
-            totalWithdrawals: totalWithdrawalsThisYear,
-            withdrawalCapitalGain: withdrawalCapitalGain,
-            rebalancingCapitalGain: rebalancingCapitalGain,
-            dividendIncome: dividendIncomeThisYear,
-            oasClawback: taxResult.oasClawback,
-            marginalTaxRate: taxResult.marginalRate,
-            // [수정] 100으로 나누기
-            tfsaContributionRoomStart: tfsaContributionRoom - annualTfsaLimit,
-            tfsaContributionRoomEnd: tfsaContributionRoom,
-            decisionLog: decisionLog,
-        });
-    } 
-
-   return { status: 'SUCCESS', yearlyData, fundDepletionYear };
-};
+        if (balances.checking > temporaryMaxBala
