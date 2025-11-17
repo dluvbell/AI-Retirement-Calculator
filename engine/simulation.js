@@ -11,7 +11,8 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
 
     // [수정] 은퇴 시점 가치로 변환 (사용자 요청 사항 반영)
     // 2025년에 입력한 금액이 2035년에 시작된다면, 10년치 복리 적용
-    simulationScenario.incomes.forEach(item => {
+    // ★★★ [JS 버그 수정] scenario.settings에서 데이터를 읽도록 수정 ★★★
+    simulationScenario.settings.incomes.forEach(item => {
         if (item.startYear > baseYearForInflation) {
             const yearsToCompound = item.startYear - baseYearForInflation;
             // [수정] JS에서는 100을 나눌 필요가 없습니다 (이미 createApiPayload에서 처리됨).
@@ -21,7 +22,8 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             item.amount = item.amount * Math.pow(1 + (item.growthRate || 0) / 100, yearsToCompound);
         }
     });
-    simulationScenario.expenses.forEach(item => {
+    // ★★★ [JS 버그 수정] scenario.settings에서 데이터를 읽도록 수정 ★★★
+    simulationScenario.settings.expenses.forEach(item => {
         if (item.startYear > baseYearForInflation) {
             const yearsToCompound = item.startYear - baseYearForInflation;
             item.amount = item.amount * Math.pow(1 + (item.growthRate || 0) / 100, yearsToCompound);
@@ -97,10 +99,12 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         const startAccounts = deepCopy(accounts);
         let decisionLog = {};
 
-        // [수정] 미리 계산된 simulationScenario 사용
-        const annualExpenses = simulationScenario.expenses.reduce((acc, exp) => (currentYear >= exp.startYear && currentYear <= (exp.endYear || endYear) ? acc + exp.amount * getInflationFactor(currentYear, exp.startYear, exp.growthRate) : acc), 0);
-        const annualIncomes = simulationScenario.incomes.reduce((acc, inc) => (currentYear >= inc.startYear && currentYear <= (inc.endYear || endYear) ? acc + inc.amount * getInflationFactor(currentYear, inc.startYear, inc.growthRate) : acc), 0);
-        const oneTimeEventsThisYear = scenario.oneTimeEvents.filter(e => e.year === currentYear);
+        // ★★★ [JS 버그 수정] scenario.settings에서 데이터를 읽도록 수정 ★★★
+        const annualExpenses = simulationScenario.settings.expenses.reduce((acc, exp) => (currentYear >= exp.startYear && currentYear <= (exp.endYear || endYear) ? acc + exp.amount * getInflationFactor(currentYear, exp.startYear, exp.growthRate) : acc), 0);
+        // ★★★ [JS 버그 수정] scenario.settings에서 데이터를 읽도록 수정 ★★★
+        const annualIncomes = simulationScenario.settings.incomes.reduce((acc, inc) => (currentYear >= inc.startYear && currentYear <= (inc.endYear || endYear) ? acc + inc.amount * getInflationFactor(currentYear, inc.startYear, inc.growthRate) : acc), 0);
+        // ★★★ [JS 버그 수정] scenario.settings에서 데이터를 읽도록 수정 ★★★
+        const oneTimeEventsThisYear = scenario.settings.oneTimeEvents.filter(e => e.year === currentYear);
         const oneTimeIncome = oneTimeEventsThisYear.reduce((acc, e) => e.type === 'income' ? acc + e.amount : acc, 0);
         const oneTimeExpense = oneTimeEventsThisYear.reduce((acc, e) => e.type === 'expense' ? acc + e.amount : acc, 0);
         const totalAvailableFunds = startBalances.rrsp + startBalances.tfsa + startBalances.nonReg + startBalances.checking + annualIncomes + oneTimeIncome;
@@ -269,7 +273,8 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         });
 
         // [수정] 100으로 나누기
-        const oasIncomeData = scenario.incomes.find(i => i.type === 'OAS');
+        // ★★★ [JS 버그 수정] scenario.settings에서 데이터를 읽도록 수정 ★★★
+        const oasIncomeData = scenario.settings.incomes.find(i => i.type === 'OAS');
         const oasIncome = oasIncomeData ? oasIncomeData.amount * getInflationFactor(currentYear, oasIncomeData.startYear, oasIncomeData.growthRate / 100.0) : 0;
         
         const taxResult = calculateTaxWithClawback({
