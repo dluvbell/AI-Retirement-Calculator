@@ -21,400 +21,304 @@ const deepCopy = (obj, visited = new WeakMap()) => {
 const SCENARIO_COLORS = ['#38bdf8', '#fbbf24', '#a78bfa', '#4ade80', '#f87171'];
 
 const App = () => {
-    const [scenarios, setScenarios] = React.useState([createNewScenario("My Default Scenario")]);
+    // ★★★ [버그 수정] createNewScenario가 전역(window) 스코프에 있으므로, window.createNewScenario로 호출합니다. ★★★
+    const [scenarios, setScenarios] = React.useState([window.createNewScenario("My Default Scenario")]);
     const [activeScenarioId, setActiveScenarioId] = React.useState(scenarios[0].id);
     const activeScenario = scenarios.find(s => s.id === activeScenarioId);
     
     const [standardResults, setStandardResults] = React.useState({});
     const [aiResults, setAiResults] = React.useState({});
-    const [isCalculatingStd, setIsCalculatingStd] = React.useState(false);
-
-    const [isCalculatingMC, setIsCalculatingMC] = React.useState(false);
-
-    const fileInputRef = React.useRef(null);
-    const [importError, setImportError] = React.useState(null);    
-    const [mcProgress, setMcProgress] = React.useState(0);
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [progress, setProgress] = React.useState({ message: '', percentage: 0 });
+    const [error, setError] = React.useState(null);
+    const [apiStatus, setApiStatus] = React.useState({ ai: null, baseline: null });
     const [devMode, setDevMode] = React.useState(false);
-
-    const [openSections, setOpenSections] = React.useState({
-        basic: true,
-        assets: true,
-        incomes: false,
-	    expert: false,
-    });
-
-    const toggleSection = (section) => {
-        setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
-    };
-
-    const runStandardSimulation = () => {
-        const validationResult = validateScenario(activeScenario);
-        if (!validationResult.isValid) {
-            alert(`시나리오 "${activeScenario.name}"의 입력 값에 오류가 있습니다:\n\n` + validationResult.errors.join('\n'));
+    
+    const [simulationWorker, setSimulationWorker] = React.useState(null);
+    
+    // Web Worker 초기화
+    React.useEffect(() => {
+        const worker = new Worker('./engine/simulation.worker.js');
+        worker.onmessage = (e) => {
+            if (e.data.error) {
+                setError(`Worker Error: ${e.data.error}`);
+                setIsLoading(false);
+            } else if (e.data.type === 'progress') {
+                setProgress({ 
+                    message: `Running Baseline Monte Carlo... (${e.data.completedRuns}/${e.data.totalRuns})`,
+                    percentage: (e.data.completedRuns / e.data.totalRuns) * 100
+                });
+            } else {
+                handleStandardSimResult(activeScenario.id, e.data);
+                setApiStatus(prev => ({ ...prev, baseline: 'complete' }));
+                setIsLoading(false);
+            }
+        };
+        setSimulationWorker(worker);
+        
+        return () => {
+            worker.terminate();
+        };
+    }, [activeScenario.id]); // activeScenario.id가 바뀔 때마다 (예: 삭제) 워커를 재설정할 필요는 없을 수 있으나, 일단 유지
+    
+    // --- 시나리오 관리 핸들러 ---
+    const handleAddScenario = () => {
+        if (scenarios.length >= 3) {
+            alert("You can add up to 3 scenarios.");
             return;
         }
-
-        setIsCalculatingStd(true);
-        setStandardResults(prev => ({ ...prev, [activeScenarioId]: null }));
-        setAiResults(prev => ({...prev, [activeScenarioId]: null}));
-
-        (async () => {
-            try {
-                const payload = createApiPayload(activeScenario);
-                
-                const response = await fetch('http://127.0.0.1:5001/simulate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(`서버 응답 오류: ${errorData.error || response.statusText}`);
-                }
-
-                const result = await response.json();
-                
-                setStandardResults(prev => ({
-                    ...prev,
-                    [activeScenarioId]: {
-                        yearlyData: result.chart_data.baseline_nw.map((nw, i) => ({
-                            year: (activeScenario.settings.startYear) + i,
-                            age: (activeScenario.settings.startYear - activeScenario.settings.birthYear) + i,
-                            endTotalBalance: nw,
-                        })),
-                        finalBalance: result.baseline.net_worth,
-                        totalTax: result.baseline.tax_paid,
-                        detailedLog: result.detailed_log.baseline_log
-                    }
-                }));
-
-                setAiResults(prev => ({
-                    ...prev,
-                    [activeScenarioId]: {
-                        yearlyData: result.chart_data.ai_nw.map((nw, i) => ({
-                            year: (activeScenario.settings.startYear) + i,
-                            age: (activeScenario.settings.startYear - activeScenario.settings.birthYear) + i,
-                            endTotalBalance: nw
-                        })),
-                        finalBalance: result.ai_optimized.net_worth,
-                        totalTax: result.ai_optimized.tax_paid,
-                        detailedLog: result.detailed_log.ai_log
-                    }
-                }));
-
-            } catch (error) {
-                console.error(`시나리오 "${activeScenario.name}" 처리 중 오류:`, error);
-                alert(`시나리오 "${activeScenario.name}"을 계산하는 중 오류가 발생했습니다: ${error.message}`);
-            }
-            setIsCalculatingStd(false);
-        })();
+        const newScenario = window.createNewScenario(`Scenario ${scenarios.length + 1}`);
+        setScenarios(prev => [...prev, newScenario]);
+        setActiveScenarioId(newScenario.id);
     };
 
-    const handleSettingsChange = (key, value, action = 'replace') => {
-        setScenarios(prevScenarios => {
-            const newScenarios = prevScenarios.map(scenario => {
-                if (scenario.id === activeScenarioId) {
-                    const newScenario = deepCopy(scenario);
-                    
-                    if (key === 'settings' && action === 'replace') {
-                        newScenario.settings = value;
-                        return newScenario;
-                    }
+    const handleCopyScenario = (idToCopy) => {
+        if (scenarios.length >= 3) {
+            alert("You can add up to 3 scenarios.");
+            return;
+        }
+        const scenarioToCopy = scenarios.find(s => s.id === idToCopy);
+        const newScenario = {
+            ...deepCopy(scenarioToCopy),
+            id: Date.now(),
+            name: `${scenarioToCopy.name} (Copy)`
+        };
+        setScenarios(prev => [...prev, newScenario]);
+        setActiveScenarioId(newScenario.id);
+    };
 
-                    const keys = key.split('.');
-                    if (keys.length > 1) {
-                        let temp = newScenario.settings;
-                        for (let i = 0; i < keys.length - 1; i++) {
-                            temp = temp[keys[i]];
-                        }
-                        temp[keys[keys.length - 1]] = value;
-                    } else if (newScenario.settings.hasOwnProperty(key)) {
-                        newScenario.settings[key] = value;
-                    } else if (Array.isArray(newScenario[key])) {
-                        if (action === 'add_or_edit') {
-                            const existingItemIndex = newScenario[key].findIndex(i => i.id === value.id);
-                            if (existingItemIndex > -1) {
-                                newScenario[key][existingItemIndex] = value;
-                            } else {
-                                newScenario[key].push(value);
-                            }
-                        } else {
-                           newScenario[key] = value;
-                        }
-                    } else {
-                        newScenario.settings[key] = value;
-                    }
+    const handleDeleteScenario = (idToDelete) => {
+        if (scenarios.length <= 1) {
+            alert("You must have at least one scenario.");
+            return;
+        }
+        const newScenarios = scenarios.filter(s => s.id !== idToDelete);
+        setScenarios(newScenarios);
+        if (activeScenarioId === idToDelete) {
+            setActiveScenarioId(newScenarios[0].id);
+        }
+    };
 
-                    // [수정] birthYear 또는 lifeExpectancy 변경 시 endYear를 올바르게 재계산합니다.
-                    // (참고: 'scenario'는 변경 전 상태, 'newScenario'는 변경 중인 상태입니다)
-                    if (key === 'birthYear') {
-                        const newBirthYear = parseInt(value, 10);
-                        // 기존 기대수명을 (변경 전 endYear - 변경 전 birthYear)로 계산합니다.
-                        const lifeExpectancy = scenario.settings.endYear - scenario.settings.birthYear;
-                        if (!isNaN(lifeExpectancy) && !isNaN(newBirthYear)) {
-                            newScenario.settings.endYear = newBirthYear + lifeExpectancy;
-                        }
-                    } else if (key === 'lifeExpectancy') {
-                        // 'lifeExpectancy'는 settings에 저장되지 않지만, BasicSettings.js가 이 key로 호출합니다.
-                        const birthYear = newScenario.settings.birthYear;
-                        const newLifeExpectancy = parseInt(value, 10);
-                        if (!isNaN(birthYear) && !isNaN(newLifeExpectancy)) {
-                            newScenario.settings.endYear = birthYear + newLifeExpectancy;
-                        }
-                    }
-                    return newScenario;
-                }
-                return scenario;
-            });
-            return newScenarios;
-        });
+    const handleRenameScenario = (idToRename, newName) => {
+        setScenarios(prev => prev.map(s => s.id === idToRename ? { ...s, name: newName } : s));
     };
 
     const handleSelectScenario = (id) => {
         setActiveScenarioId(id);
     };
 
-    const handleAddScenario = () => {
-        setScenarios(prevScenarios => {
-            if (prevScenarios.length >= 5) {
-                alert("You can create a maximum of 5 scenarios.");
-                return prevScenarios;
-            }
-            const newScenario = createNewScenario(`Scenario ${prevScenarios.length + 1}`);
-            setActiveScenarioId(newScenario.id); 
-            return [...prevScenarios, newScenario];
-        });
-    };
-    
-    const handleRenameScenario = (id, newName) => {
-        setScenarios(prevScenarios => prevScenarios.map(s => (s.id === id ? { ...s, name: newName } : s)));
-    };
-
-    const handleCopyScenario = (id) => {
-        setScenarios(prevScenarios => {
-            if (prevScenarios.length >= 5) {
-                alert("You can create a maximum of 5 scenarios.");
-                return prevScenarios;
-            }
-            const scenarioToCopy = prevScenarios.find(s => s.id === id);
-            if (!scenarioToCopy) return prevScenarios;
-            const newScenario = deepCopy(scenarioToCopy);
-            newScenario.id = Date.now();
-            newScenario.name = `${scenarioToCopy.name} (Copy)`;
-            setActiveScenarioId(newScenario.id);
-            return [...prevScenarios, newScenario];
-        });
-    };
-
-    const handleDeleteScenario = (id) => {
-        if (scenarios.length <= 1) {
-            alert("The last scenario cannot be deleted.");
-            return;
-        }
-        if (activeScenarioId === id) {
-            const newActiveScenario = scenarios.find(s => s.id !== id);
-            setActiveScenarioId(newActiveScenario.id);
-        }
-        setScenarios(prevScenarios => prevScenarios.filter(s => s.id !== id));
-        setStandardResults(prev => {
-            const newResults = {...prev};
-            delete newResults[id];
-            return newResults;
-        });
-        setAiResults(prev => {
-            const newResults = {...prev};
-            delete newResults[id];
-            return newResults;
-        });
-    };
-    
-    const runMonteCarloTest = () => {
-        alert("This feature is now integrated into the 'Run AI Simulation'. Each run is an average of the selected number of Monte Carlo simulations (e.g., 1000 runs) executed by the AI engine.");
-    };
-
-    const handleExport = () => {
-        exportScenarioToJSON(activeScenario);
-    };
-
-    const handleImportClick = () => {
-        fileInputRef.current.click();
-    };
-
-    const handleFileChange = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            importScenarioFromJSON(file, (importedScenario, error) => {
-                if (error) {
-                    setImportError(error);
-                    alert(`Import failed: ${error}`);
+    // --- 설정 변경 핸들러 ---
+    const handleSettingsChange = (key, value) => {
+        setScenarios(prev => prev.map(s => {
+            if (s.id === activeScenarioId) {
+                // dot notation (예: 'portfolio.useSimpleMode')을 처리
+                const keys = key.split('.');
+                if (keys.length > 1) {
+                    const newSettings = { ...s.settings };
+                    let currentLevel = newSettings;
+                    for (let i = 0; i < keys.length - 1; i++) {
+                        currentLevel = currentLevel[keys[i]];
+                    }
+                    currentLevel[keys[keys.length - 1]] = value;
+                    return { ...s, settings: newSettings };
                 } else {
-                    const newScenario = deepCopy(activeScenario);
-                    newScenario.name = importedScenario.name || activeScenario.name;
-                    newScenario.settings = importedScenario.settings || activeScenario.settings;
-                    
-                    setScenarios(prev => prev.map(s => s.id === activeScenarioId ? newScenario : s));
-                    setImportError(null); 
-                    alert(`Scenario "${newScenario.name}" loaded successfully!`);
+                    return { ...s, settings: { ...s.settings, [key]: value } };
                 }
-            });
-        }
-        event.target.value = null; 
+            }
+            return s;
+        }));
+    };
+    
+    // --- 시뮬레이션 실행 ---
+    const EMPTY_RESULT = { finalBalance: 0, totalTax: 0, yearlyData: [], detailedLog: [] };
+
+    const handleStandardSimResult = (scenarioId, result) => {
+        setStandardResults(prev => ({
+            ...prev,
+            [scenarioId]: {
+                finalBalance: result.finalBalance,
+                totalTax: result.totalTax,
+                yearlyData: result.yearlyData,
+                detailedLog: result.detailedLog || []
+            }
+        }));
     };
 
-    const handleDownloadResults = (format) => {
-        const activeAiResults = aiResults[activeScenarioId];
-        const activeStandardResults = standardResults[activeScenarioId];
-        if (!activeAiResults || !activeStandardResults) {
-            alert("Please run the simulation first to generate results.");
+    const runStandardSimulation = (scenario) => {
+        if (!simulationWorker) {
+            setError("Simulation worker is not ready.");
             return;
         }
-        if (format === 'csv') {
-            exportToCSV(activeAiResults.detailedLog, `${activeScenario.name}_AI_Optimized`);
-            exportToCSV(activeStandardResults.detailedLog, `${activeScenario.name}_Baseline`);
+        setIsLoading(true);
+        setApiStatus(prev => ({ ...prev, baseline: 'running' }));
+        setProgress({ message: 'Starting Baseline Monte Carlo...', percentage: 0 });
+        
+        try {
+            // [버그 수정] simulation.js가 advancedSettings를 참조하도록 수정 (simulation.js 파일 자체도 수정 필요)
+            // const scenarioForWorker = { ...scenario.settings }; 
+            // -> App.js는 시나리오 객체 전체를 보내야 함 (simulation.js가 settings를 참조)
+            simulationWorker.postMessage({
+                scenario: scenario, 
+                runs: 100 // 몬테카를로 횟수 (임시)
+            });
+        } catch (err) {
+            console.error("Standard sim error:", err);
+            setError(`Standard Sim Error: ${err.message}`);
+            handleStandardSimResult(scenario.id, EMPTY_RESULT);
+            setIsLoading(false);
+            setApiStatus(prev => ({ ...prev, baseline: 'error' }));
         }
     };
     
+    const runAiSimulation = (scenario) => {
+        setIsLoading(true);
+        setError(null);
+        setProgress({ message: 'Running AI Simulation...', percentage: 0 });
+        setApiStatus({ baseline: null, ai: 'running' });
+
+        const payload = createApiPayload(scenario);
+        
+        fetch('http://127.0.0.1:8080/simulate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+            return res.json();
+        })
+        .then(data => {
+            setAiResults(prev => ({
+                ...prev,
+                [scenario.id]: {
+                    finalBalance: data.ai_optimized.net_worth,
+                    totalTax: data.ai_optimized.tax_paid,
+                    yearlyData: data.chart_data.ai_nw.map((nw, i) => ({ year: parseInt(data.chart_data.labels[i]), age: parseInt(data.chart_data.labels[i]), endTotalBalance: nw })),
+                    detailedLog: data.detailed_log.ai_log || []
+                }
+            }));
+            // AI 시뮬레이션이 Baseline 데이터도 반환하므로 함께 저장
+            setStandardResults(prev => ({
+                ...prev,
+                [scenario.id]: {
+                    finalBalance: data.baseline.net_worth,
+                    totalTax: data.baseline.tax_paid,
+                    yearlyData: data.chart_data.baseline_nw.map((nw, i) => ({ year: parseInt(data.chart_data.labels[i]), age: parseInt(data.chart_data.labels[i]), endTotalBalance: nw })),
+                    detailedLog: data.detailed_log.baseline_log || []
+                }
+            }));
+            setApiStatus({ baseline: 'complete', ai: 'complete' });
+            setIsLoading(false);
+        })
+        .catch(err => {
+            console.error("AI sim error:", err);
+            setError(`AI Sim Error: ${err.message}`);
+            setApiStatus({ baseline: 'error', ai: 'error' });
+            setIsLoading(false);
+        });
+    };
+    
+    if (!activeScenario) {
+        return <div>Loading scenarios...</div>;
+    }
+
     return (
-    <div>
-        <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '16px 20px',
-            backgroundColor: '#111827',
-            borderBottom: '1px solid #374151'
-        }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: 'white' }}>
-                Intelligent Retirement Planner
-            </h1>
-            <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                    style={{ padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', backgroundColor: '#374151', border: '1px solid #4b5563', color: '#d1d5db', transition: 'background-color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4b5563'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#374151'}
-                    title={scenarios.length >= 5 ? "Maximum of 5 scenarios reached." : "Add Scenario"}
-                    onClick={handleAddScenario}
-                    disabled={scenarios.length >= 5}
-                >
-                    Add Scenario
-                </button>
-                <button onClick={handleImportClick} style={{ padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', backgroundColor: '#374151', border: '1px solid #4b5563', color: '#d1d5db', transition: 'background-color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4b5563'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#374151'}>Import</button>
-                <button onClick={handleExport} style={{ padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', backgroundColor: '#374151', border: '1px solid #4b5563', color: '#d1d5db', transition: 'background-color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4b5563'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#374151'}>Export</button>
-                <div style={{height: '100%', borderLeft: '1px solid #4b5563'}}></div>
-                <button onClick={() => handleDownloadResults('csv')} style={{ padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', backgroundColor: '#374151', border: '1px solid #4b5563', color: '#d1d5db', transition: 'background-color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4b5563'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#374151'}>Download CSV</button>
-            </div>
+    <div style={{display: 'flex', minHeight: '100vh', backgroundColor: '#111827', color: 'white'}}>
+        <div style={{width: '400px', borderRight: '1px solid #374151', padding: '20px', overflowY: 'auto', height: '100vh'}}>
+            <h2 style={{fontSize: '24px', fontWeight: '600', marginBottom: '20px'}}>Retirement Planner</h2>
+            <BasicSettings scenario={activeScenario} onUpdate={handleSettingsChange} />
+            <AssetsStrategy scenario={activeScenario} onUpdate={handleSettingsChange} />
+            <AssetProfiles scenario={activeScenario} onUpdate={handleSettingsChange} useSimpleMode={activeScenario.settings.portfolio.useSimpleMode} />
+            <IncomesExpenses scenario={activeScenario} onUpdate={handleSettingsChange} />
         </div>
         
-        <ScenarioManager
-            scenarios={scenarios}
-            activeScenarioId={activeScenarioId}
-            onSelectScenario={handleSelectScenario}
-            onRenameScenario={handleRenameScenario}
-            onCopyScenario={handleCopyScenario}
-            onDeleteScenario={handleDeleteScenario}
-	        colors={SCENARIO_COLORS}
-        />
-        <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            accept=".json"
-            onChange={handleFileChange}
-        />
-        
-        <div className="flex flex-col gap-5 p-5">
-            <div className="w-full flex flex-col gap-5">
-                <div className="card-section">
-                    <button onClick={() => toggleSection('basic')} className="w-full flex items-center justify-between text-lg font-bold text-left p-4 transition-colors duration-200 hover:bg-gray-700">
-                        <span>Basic Information</span>
-                        <svg style={{ transform: openSections.basic ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                    {openSections.basic && (
-                        <div className="p-5">
-                            <BasicSettings
-                                scenario={activeScenario}
-                                onUpdate={handleSettingsChange}
-                            />
-                        </div>
-                    )}
-                </div>
+        <div style={{flex: 1, padding: '20px', overflowY: 'auto', height: '100vh'}}>
+            <ScenarioManager 
+                scenarios={scenarios}
+                activeScenarioId={activeScenarioId}
+                onSelectScenario={handleSelectScenario}
+                onRenameScenario={handleRenameScenario}
+                onCopyScenario={handleCopyScenario}
+                onDeleteScenario={handleDeleteScenario}
+                colors={SCENARIO_COLORS}
+            />
+            
+            <div style={{backgroundColor: '#1f2937', padding: '20px', borderRadius: '8px', marginTop: '20px'}}>
+            <div style={{display: 'flex', gap: '16px', alignItems: 'flex-end'}}>
+                <button 
+                    onClick={() => runAiSimulation(activeScenario)}
+                    style={{
+                        padding: '10px 20px',
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        backgroundColor: apiStatus.ai === 'running' ? '#555' : (apiStatus.ai === 'complete' ? '#16a34a' : '#2563eb'),
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: isLoading ? 'not-allowed' : 'pointer'
+                    }}
+                    disabled={isLoading}
+                >
+                    {apiStatus.ai === 'running' ? 'Running AI...' : (apiStatus.ai === 'complete' ? 'Run AI Simulation (Done)' : 'Run AI Simulation')}
+                </button>
+                
+                <button 
+                    onClick={() => runStandardSimulation(activeScenario)}
+                    style={{
+                        padding: '10px 20px',
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        backgroundColor: apiStatus.baseline === 'running' ? '#555' : (apiStatus.baseline === 'complete' ? '#16a34a' : '#4b5563'),
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: isLoading ? 'not-allowed' : 'pointer'
+                    }}
+                    disabled={isLoading}
+                >
+                    {apiStatus.baseline === 'running' ? 'Running Baseline...' : (apiStatus.baseline === 'complete' ? 'Run Baseline (Done)' : 'Run Baseline (JS)')}
+                </button>
 
-                <div className="card-section">
-                    <button onClick={() => toggleSection('assets')} className="w-full flex items-center justify-between text-lg font-bold text-left p-4 transition-colors duration-200 hover:bg-gray-700">
-                        <span>Assets & Strategy</span>
-                        <svg style={{ transform: openSections.assets ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                    {openSections.assets && (
-                        <div className="p-5">
-                            <AssetsStrategy
-                                scenario={activeScenario}
-                                onUpdate={handleSettingsChange}
-                            />
-                            <AssetProfiles
-                                scenario={activeScenario}
-                                onUpdate={handleSettingsChange}
-                                useSimpleMode={activeScenario.settings.portfolio.useSimpleMode}
-                            />
+                {isLoading && (
+                    <div style={{flex: 1, color: '#d1d5db'}}>
+                        <div style={{fontSize: '14px', marginBottom: '4px'}}>{progress.message}</div>
+                        <div style={{height: '6px', backgroundColor: '#374151', borderRadius: '3px', overflow: 'hidden'}}>
+                            <div style={{width: `${progress.percentage}%`, height: '100%', backgroundColor: '#a5f3fc', transition: 'width 0.2s'}}></div>
                         </div>
-                    )}
-                </div>
-
-                <div className="card-section">
-                    <button onClick={() => toggleSection('incomes')} className="w-full flex items-center justify-between text-lg font-bold text-left p-4 transition-colors duration-200 hover:bg-gray-700">
-                        <span>Incomes & Events</span>
-                        <svg style={{ transform: openSections.incomes ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                    {openSections.incomes && (
-                        <div className="p-5">
-                            <IncomesExpenses
-                                scenario={activeScenario}
-                                onUpdate={handleSettingsChange}
-                            />
-                        </div>
-                    )}
-                </div>
-
-               <div className="bg-gray-800 p-5 rounded-lg border border-gray-700">
-                <h2 className="text-xl font-bold mb-4">Run Simulations</h2>
-                <div className="flex gap-4 items-end flex-wrap">
+                    </div>
+                )}
+                {error && <div style={{color: '#f87171', fontSize: '14px', flex: 1}}>{error}</div>}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+                <div style={{ display: 'flex', gap: '16px' }}>
                     <button 
-                        onClick={runStandardSimulation} 
-                        className="px-5 py-2.5 text-lg justify-center bg-blue-600 text-white rounded-md cursor-pointer h-12 flex items-center transition-colors hover:bg-blue-700"
-                        style={{ flexGrow: 2 }}
-                        disabled={isCalculatingStd}
+                        onClick={handleAddScenario}
+                        style={{
+                            padding: '6px 12px', fontSize: '14px',
+                            backgroundColor: 'transparent', color: '#a5f3fc',
+                            border: '1px solid #a5f3fc', borderRadius: '6px',
+                            cursor: (isLoading || scenarios.length >= 3) ? 'not-allowed' : 'pointer'
+                        }}
+                        disabled={isLoading || scenarios.length >= 3}
                     >
-                        {isCalculatingStd ? 'Calculating...' : 'Run AI Simulation'}
+                        + Add Scenario
                     </button>
-
-                    <div className="flex flex-col gap-2 min-w-[250px]" style={{ flexGrow: 1 }}>
-                       <div className="flex gap-4 items-end">
-                            <button onClick={runMonteCarloTest} disabled={true} className="px-5 py-2.5 text-lg justify-center bg-gray-600 text-white rounded-md flex items-center h-12 disabled:cursor-not-allowed disabled:opacity-70 flex-grow transition-colors">
-                                Monte Carlo (Legacy)
-                            </button>
-                            <div style={{width: '110px'}}>
-                                <label htmlFor="simulationCount" style={{fontSize: '12px', color: '#9ca3af'}}>Runs</label>
-                                <select
-                                    id="simulationCount"
-                                    value={activeScenario.settings.monteCarlo.simulationCount}
-                                    onChange={(e) => handleSettingsChange('monteCarlo.simulationCount', parseInt(e.target.value, 10))}
-                                    style={{width: '100%', padding: '8px 12px', backgroundColor: '#374151', border: '1px solid #4b5563', borderRadius: '6px', color: 'white', height: '48px'}}
+                    <div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => alert('Export functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Export</button>
+                            <button onClick={() => alert('Import functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Import</button>
+                            <div style={{position: 'relative'}}>
+                                <select 
+                                    onChange={(e) => alert(e.target.value)} 
+                                    style={{
+                                        padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', 
+                                        color: 'white', border: 'none', borderRadius: '6px', 
+                                        cursor: 'pointer', appearance: 'none', paddingRight: '30px'
+                                    }}
                                 >
-                                    {[100, 500, 1000, 2000, 5000].map(val => (
-                                        <option key={val} value={val}>{val.toLocaleString()}</option>
-                                    ))}
+                                    <option value="">Load Template</option>
+                                    <option value="template1">Aggressive Growth</option>
+                                    <option value="template2">Conservative (Capital Preservation)</option>
                                 </select>
                             </div>
                         </div>
