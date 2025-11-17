@@ -178,7 +178,8 @@ const App = () => {
 
         const payload = createApiPayload(scenario);
         
-        fetch('http://127.0.0.1:8080/simulate', {
+        // ★★★ [버그 수정] 포트를 8080에서 5001로 변경 ★★★
+        fetch('http://127.0.0.1:5001/simulate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -235,7 +236,18 @@ const App = () => {
             <IncomesExpenses scenario={activeScenario} onUpdate={handleSettingsChange} />
         </div>
         
-        {/* ★★★ [레이아웃 수정] flex: 1, height, overflow를 제거하고, maxWidth와 margin을 주어 중앙 정렬합니다. ★★★ */}
+        {/* ★★★ [레이아DDS
+.layout-options-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.layout-options-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+}
+아웃 수정] flex: 1, height, overflow를 제거하고, maxWidth와 margin을 주어 중앙 정렬합니다. ★★★ */}
         <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <ScenarioManager 
                 scenarios={scenarios}
