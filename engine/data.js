@@ -109,7 +109,8 @@ const DEFAULT_MONTE_CARLO = {
  * @param {string} name - 새 시나리오의 이름
  * @returns {object} - 시나리오 기본값이 채워진 객체
  */
-const createNewScenario = (name) => {
+// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+var createNewScenario = (name) => {
     const currentYear = new Date().getFullYear();
     const birthYear = 1980;
     const startYear = 2035; // 은퇴 시작 연도 (55세)
@@ -161,7 +162,8 @@ const createNewScenario = (name) => {
  * @param {object} scenario - 검사할 시나리오 객체
  * @returns {object} - { isValid: boolean, errors: string[] }
  */
-const validateScenario = (scenario) => {
+// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+var validateScenario = (scenario) => {
     const errors = [];
     const settings = scenario.settings;
 
@@ -214,7 +216,8 @@ const validateScenario = (scenario) => {
  * @param {object} scenario - 프론트엔드의 활성 시나리오 객체
  * @returns {object} - Python 서버의 /simulate 엔드포인트로 전송될 JSON 객체
  */
-const createApiPayload = (scenario) => {
+// ★★★ [버그 수정] 'const'를 'var'로 변경하여 전역(window) 스코프에 등록 ★★★
+var createApiPayload = (scenario) => {
     
     // 1. 프론트엔드 키(JS)를 백엔드 키(Python)로 매핑합니다.
     const assetProfileMap = {
