@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Retirement Planner (Multi-Province)</title>
+    <meta name="theme-color" content="#111827"/>
+    
+    <script src="https://unpkg.com/javascript-lp-solver/prod/solver.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <link href="https://unpkg.com/heroicons@1.0.6/dist/solid.min.css" rel="stylesheet">
+    
+    <script src="https://unpkg.com/react@17/umd/react.development.js" onerror="loadScript('/vendor/react.development.js')"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" onerror="loadScript('/vendor/react-dom.development.js')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" onerror="loadScript('/vendor/chart.js')"></script>
+     <style>
+	body {
+            background-color: #111827; /* 전체 페이지 배경을 어두운 색으로 설정 */
+	    color: #E5E7EB;
+            font-family: 'Inter', sans-serif;
+        }
+        .card-section {
+    background-color: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 12px;
+    margin-top: 1px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    overflow: hidden; /* For border-radius */
+}
+
+.card-section > button {
+    background-color: transparent;
+    transition: background-color 0.2s ease-in-out;
+    border: none;
+}
+
+.card-section > button:hover {
+    background-color: #374151;
+}
+
+.card-section > div { /* This targets the content div */
+     border-top: 1px solid #374151;
+}
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        // --- Fallback and Error Handling Script ---
+        function loadScript(src) {
+            console.warn(`CDN failed. Loading local fallback: ${src}`);
+            const script = document.createElement('script');
+            script.src = src;
+            document.head.appendChild(script);
+        }
+
+        window.addEventListener('error', function (event) {
+            const message = event.message || "An unknown error occurred.";
+            const isScriptError = event.filename && event.filename.includes('.js');
+
+            if (isScriptError) {
+                 const rootElement = document.getElementById('root');
+                 if (rootElement) {
+                    rootElement.innerHTML = `
+                        <div style="padding: 40px; text-align: center; color: #fecaca;">
+                            <h1 style="font-size: 24px; font-weight: bold;">Application Error</h1>
+                            <p style="margin-top: 16px;">A critical error occurred while loading application components.</p>
+                            <p style="margin-top: 8px;">Please check your internet connection and try refreshing the page.</p>
+                            <button onclick="window.location.reload()" style="margin-top: 16px; padding: 8px 16px; background-color: #2563eb; color: white; border-radius: 6px; cursor: pointer;">Retry</button>
+                            <p style="margin-top: 20px; font-size: 12px; color: #9ca3af;">Error: ${message}</p>
+                        </div>
+                    `;
+                 }
+                 console.error("Global Error Caught:", event.error);
+            }
+        });
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+<script src="./engine/utils.js?v=1.1"></script>
+<script src="./engine/data.js?v=1.1"></script>
+<script src="./engine/tax.js?v=1.1"></script>
+<script src="./engine/strategy.js?v=1.1"></script>
+<script src="./engine/simulation.js?v=1.1"></script>
+
+
+<script type="text/babel" src="./components/layout/ScenarioManager.js?v=1.1"></script>
+<script type="text/babel" src="./components/layout/ResultsSection.js?v=1.1"></script>
+
+
+<script type="text/babel" src="./components/inputs/BasicSettings.js?v=1.1"></script>
+<script type="text/babel" src="./components/inputs/AssetsStrategy.js?v=1.1"></script>
+<script type="text/babel" src="./components/inputs/IncomesExpenses.js?v=1.1"></script>
+<script type="text/babel" src="./components/inputs/AssetProfiles.js?v=1.1"></script>
+
+<script type="text/babel" src="./components/shared/Tooltip.js?v=1.1"></script>
+
+<script type="text/babel" src="./App.js?v=1.1"></script>
+
+<script type="text/babel">
+     ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
