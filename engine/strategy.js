@@ -19,6 +19,7 @@ var lookAheadAndAdvise = function(currentAge, currentYear, rrspBalance, currentB
             return acc;
         }, 0);
 
+        // [수정] RRIF 최소 인출액은 여전히 RRIF 잔액(rrspBalance)으로 계산합니다.
         var futureRrifMin = getRrifMinWithdrawal(futureAge, futureRrspBalance);
         var totalFutureBaseIncome = futureAnnualIncomes + futureRrifMin;
         futureIncomes.push(totalFutureBaseIncome);
@@ -36,18 +37,58 @@ var lookAheadAndAdvise = function(currentAge, currentYear, rrspBalance, currentB
     return 0;
 };
 
-var getRrifMinWithdrawal = function(age, rrspBalance) {
-    if (age < 71 || rrspBalance <= 0) return 0;
-    var withdrawalRates = {
-        71: 0.0528, 72: 0.0540, 73: 0.0553, 74: 0.0567, 75: 0.0582,
-        76: 0.0598, 77: 0.0617, 78: 0.0636, 79: 0.0658, 80: 0.0682,
-        81: 0.0708, 82: 0.0738, 83: 0.0771, 84: 0.0808, 85: 0.0851,
-        86: 0.0899, 87: 0.0955, 88: 0.1021, 89: 0.1099, 90: 0.1192,
-        91: 0.1306, 92: 0.1449, 93: 0.1634, 94: 0.1879, 95: 0.2000
-    };
-    var rate = age >= 95 ? 0.20 : (withdrawalRates[age] || 0);
-    return rrspBalance * rate;
+// [수정] LIF 최소 인출 계산 로직을 포함하도록 함수를 확장
+var RRIF_LIF_WITHDRAWAL_RATES = {
+    // RRIF/LIF 공통 연방 최소 인출률 (71세부터)
+    71: 0.0528, 72: 0.0540, 73: 0.0553, 74: 0.0567, 75: 0.0582,
+    76: 0.0598, 77: 0.0617, 78: 0.0636, 79: 0.0658, 80: 0.0682,
+    81: 0.0708, 82: 0.0738, 83: 0.0771, 84: 0.0808, 85: 0.0851,
+    86: 0.0899, 87: 0.0955, 88: 0.1021, 89: 0.1099, 90: 0.1192,
+    91: 0.1306, 92: 0.1449, 93: 0.1634, 94: 0.1879, 95: 0.2000
+    // 95세 이상은 20%
 };
+
+/**
+ * LIF와 RRIF의 최소 인출액을 계산합니다.
+ * LIF는 55세부터 최소 인출이 시작됩니다.
+ * @param {number} age - 현재 나이
+ * @param {number} balance - 현재 계좌 잔액
+ * @param {string} accountType - 'rrsp' 또는 'lif'
+ * @returns {number} - 최소 인출 금액
+ */
+var getMinWithdrawal = function(age, balance, accountType) {
+    if (balance <= 0) return 0;
+
+    var rate = 0;
+    if (accountType === 'rrsp') {
+        // RRIF는 71세부터 최소 인출
+        if (age < 71) return 0;
+        rate = age >= 95 ? 0.20 : (RRIF_LIF_WITHDRAWAL_RATES[age] || 0);
+    } else if (accountType === 'lif') {
+        // LIF는 은퇴 나이(55세)부터 최소 인출
+        if (age < 55) return 0;
+
+        // 71세 미만의 LIF 최소 인출 (T-4)
+        if (age < 71) {
+            // (1 / (90 - age)) 공식을 따르며, 71세의 5.28%보다 작음
+            // 연방 기준: (1 / (90 - age)) * 100%
+            rate = 1 / Math.max(1, 90 - age);
+            // 55세: 1/35 ≈ 0.02857 (2.86%)
+            // 70세: 1/20 = 0.05 (5%)
+        } else {
+            // 71세 이상의 LIF 최소 인출은 RRIF와 동일 (T-4)
+            rate = age >= 95 ? 0.20 : (RRIF_LIF_WITHDRAWAL_RATES[age] || 0);
+        }
+    } else {
+        return 0; // RRSP/LIF가 아닌 경우
+    }
+
+    return balance * rate;
+};
+
+// [삭제] 기존의 RRIF 전용 함수는 새 함수로 대체
+// var getRrifMinWithdrawal = function(age, rrspBalance) { ... };
+
 
 var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
     var scenario = yearContext.scenario;
