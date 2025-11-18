@@ -297,7 +297,8 @@ var createApiPayload = (scenario) => {
 
     // 5. 일회성 이벤트 변환 (세금 정보 포함)
     const mappedEvents = scenario.settings.oneTimeEvents.map(event => ({
-        year: event.year,
+        // ★★★ [수정] 달력 연도(event.year)를 나이(event.year - birthYear)로 변환 ★★★
+        year: event.year - birthYear, 
         amount: event.amount,
         type: event.type,
         taxationType: event.taxationType || (event.type === 'income' ? 'nonTaxable' : 'n/a'),
@@ -332,12 +333,13 @@ var createApiPayload = (scenario) => {
         },
         chequing_min: scenario.settings.initialBalances.minChecking,
         chequing_max: scenario.settings.initialBalances.maxChecking,
-        
+
         // ★★★ [신설] LIRA/LIF 설정 매핑 (단위 변환 포함) ★★★
         locked_in_settings: {
             conversion_age: scenario.settings.lockedIn ? scenario.settings.lockedIn.conversionAge : 71,
             unlocking_percent: (scenario.settings.lockedIn ? scenario.settings.lockedIn.unlockingPercent : 50.0) / 100.0,
-            cansim_rate: (scenario.settings.lockedIn ? scenario.settings.lockedIn.cansimRate : 3.5) / 100.0
+            cansim_rate: (scenario.settings.lockedIn ? scenario.settings.lockedIn.cansimRate : 3.5) / 100.0,
+            jurisdiction: scenario.settings.province # province 필드를 jurisdiction으로 재사용
         },
 
         // [수입/지출 $0 버그 수정] start_year와 end_year를 '나이'로 변환하여 전송
