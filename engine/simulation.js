@@ -475,7 +475,9 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             totalExpense: annualExpenses + oneTimeExpense,
             taxPayable: taxBillFromLastYear,
             rrifMin: rrifMin,
-            lifMin: lifMin, // ★★★ [추가] LIF 최소 인출액 로그 ★★★
+            lifMin: lifMin, 
+            oneTimeIncome: oneTimeIncome, // ★★★ [추가] 로그 추가
+            oneTimeExpense: oneTimeExpense, // ★★★ [추가] 로그 추가
             totalWithdrawals: totalWithdrawalsThisYear,
             withdrawalCapitalGain: withdrawalCapitalGain,
             rebalancingCapitalGain: rebalancingCapitalGain,
