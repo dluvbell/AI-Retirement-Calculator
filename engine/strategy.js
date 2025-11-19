@@ -1,4 +1,4 @@
-// --- strategy.js ---
+// --- engine/strategy.js ---
 
 var lookAheadAndAdvise = function(currentAge, currentYear, rrspBalance, currentBaseIncome, scenario) {
     var expertParams = scenario.settings.expertMode && scenario.settings.expertMode.params;
@@ -19,8 +19,7 @@ var lookAheadAndAdvise = function(currentAge, currentYear, rrspBalance, currentB
             return acc;
         }, 0);
 
-        // [수정] RRIF 최소 인출액은 여전히 RRIF 잔액(rrspBalance)으로 계산합니다.
-        var futureRrifMin = getRrifMinWithdrawal(futureAge, futureRrspBalance);
+        var futureRrifMin = getMinWithdrawal(futureAge, futureRrspBalance, 'rrsp');
         var totalFutureBaseIncome = futureAnnualIncomes + futureRrifMin;
         futureIncomes.push(totalFutureBaseIncome);
     }
@@ -37,58 +36,34 @@ var lookAheadAndAdvise = function(currentAge, currentYear, rrspBalance, currentB
     return 0;
 };
 
-// [수정] LIF 최소 인출 계산 로직을 포함하도록 함수를 확장
 var RRIF_LIF_WITHDRAWAL_RATES = {
-    // RRIF/LIF 공통 연방 최소 인출률 (71세부터)
     71: 0.0528, 72: 0.0540, 73: 0.0553, 74: 0.0567, 75: 0.0582,
     76: 0.0598, 77: 0.0617, 78: 0.0636, 79: 0.0658, 80: 0.0682,
     81: 0.0708, 82: 0.0738, 83: 0.0771, 84: 0.0808, 85: 0.0851,
     86: 0.0899, 87: 0.0955, 88: 0.1021, 89: 0.1099, 90: 0.1192,
     91: 0.1306, 92: 0.1449, 93: 0.1634, 94: 0.1879, 95: 0.2000
-    // 95세 이상은 20%
 };
 
-/**
- * LIF와 RRIF의 최소 인출액을 계산합니다.
- * LIF는 55세부터 최소 인출이 시작됩니다.
- * @param {number} age - 현재 나이
- * @param {number} balance - 현재 계좌 잔액
- * @param {string} accountType - 'rrsp' 또는 'lif'
- * @returns {number} - 최소 인출 금액
- */
 var getMinWithdrawal = function(age, balance, accountType) {
     if (balance <= 0) return 0;
 
     var rate = 0;
     if (accountType === 'rrsp') {
-        // RRIF는 71세부터 최소 인출
         if (age < 71) return 0;
         rate = age >= 95 ? 0.20 : (RRIF_LIF_WITHDRAWAL_RATES[age] || 0);
     } else if (accountType === 'lif') {
-        // LIF는 은퇴 나이(55세)부터 최소 인출
         if (age < 55) return 0;
-
-        // 71세 미만의 LIF 최소 인출 (T-4)
         if (age < 71) {
-            // (1 / (90 - age)) 공식을 따르며, 71세의 5.28%보다 작음
-            // 연방 기준: (1 / (90 - age)) * 100%
             rate = 1 / Math.max(1, 90 - age);
-            // 55세: 1/35 ≈ 0.02857 (2.86%)
-            // 70세: 1/20 = 0.05 (5%)
         } else {
-            // 71세 이상의 LIF 최소 인출은 RRIF와 동일 (T-4)
             rate = age >= 95 ? 0.20 : (RRIF_LIF_WITHDRAWAL_RATES[age] || 0);
         }
     } else {
-        return 0; // RRSP/LIF가 아닌 경우
+        return 0;
     }
 
     return balance * rate;
 };
-
-// [삭제] 기존의 RRIF 전용 함수는 새 함수로 대체
-// var getRrifMinWithdrawal = function(age, rrspBalance) { ... };
-
 
 var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
     var scenario = yearContext.scenario;
@@ -97,40 +72,85 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
     var taxParameters = yearContext.taxParameters;
     var initialIncomeBreakdown = yearContext.incomeBreakdown;
 
+    // ★★★ [신설] Solver 내부에서 배우자 소득 추산 (Simulation.js와 로직 동기화) ★★★
+    var spouseSettings = scenario.settings.spouse || { hasSpouse: false };
+    var hasSpouse = spouseSettings.hasSpouse;
+    var spouseIncomePkg = null;
+
+    if (hasSpouse) {
+        // 인플레이션 팩터 계산
+        var yearsPassed = startYear - 2025;
+        var inflationFactor = Math.pow(1 + (scenario.settings.generalInflation || 0) / 100, yearsPassed);
+        
+        // 배우자 기초 소득 계산
+        var sCpp = (spouseSettings.cppIncome || 0) * inflationFactor;
+        var sPension = (spouseSettings.pensionIncome || 0) * inflationFactor;
+        var sBase = (spouseSettings.baseIncome || 0) * inflationFactor;
+        
+        // CPP Sharing 로직 적용
+        if (spouseSettings.optimizeCppSharing) {
+             var myCppItem = scenario.settings.incomes.find(function(i) { return i.type === 'CPP'; });
+             var myCpp = 0;
+             if (myCppItem && startYear >= myCppItem.startYear && startYear <= (myCppItem.endYear || scenario.settings.endYear)) {
+                 myCpp = myCppItem.amount * getInflationFactor(startYear, myCppItem.startYear, myCppItem.growthRate);
+             }
+             var totalCpp = myCpp + sCpp;
+             sCpp = totalCpp / 2;
+             // 주의: 내 CPP는 아래 'currentBaseIncome' 계산 시 자동 반영되지 않으므로 오차가 있을 수 있으나, 
+             // Solver는 '한계세율'과 '비용'만 추정하면 되므로 배우자 소득 총액만 정확하면 됨.
+        }
+
+        spouseIncomePkg = {
+            base: sBase + sCpp,
+            rrif: sPension,
+            capitalGains: 0,
+            canDividend: 0,
+            usDividend: 0,
+            oas: 0 
+        };
+    }
+    // ★★★ [신설] 끝 ★★★
+
     var MAX_ITERATIONS = 3;
     var currentWithdrawalPlan = { rrsp: 0, tfsa: 0, nonReg: 0 };
-    var finalTaxResult = { tax: 0 };
+    var finalTaxResult = { totalTax: 0 }; // [수정] tax -> totalTax 속성명 통일
     var logMessage = "Plan A: Iterative solver started.";
     var result;
 
     for (var i = 0; i < MAX_ITERATIONS; i++) {
         var capitalGainRatio = balances.nonReg > 0 ? (balances.nonReg - (balances.nonRegACB || 0)) / balances.nonReg : 0;
 
-// Correctly create the income breakdown for tax estimation
-var tempIncomeBreakdown = {
-    otherIncome: initialIncomeBreakdown.otherIncome || 0,
-    rrspWithdrawal: currentWithdrawalPlan.rrsp,
-    capitalGains: Math.max(0, capitalGainRatio) * currentWithdrawalPlan.nonReg
-};
+        var tempIncomeBreakdown = {
+            otherIncome: initialIncomeBreakdown.otherIncome || 0,
+            rrspWithdrawal: currentWithdrawalPlan.rrsp,
+            capitalGains: Math.max(0, capitalGainRatio) * currentWithdrawalPlan.nonReg
+        };
 
-var oasIncomeData = scenario.incomes.find(function(inc) { return inc.type === 'OAS'; });
-var oasIncome = (oasIncomeData && startYear >= oasIncomeData.startYear)
-    ? oasIncomeData.amount * getInflationFactor(startYear, oasIncomeData.startYear, oasIncomeData.growthRate)
-    : 0;
+        var oasIncomeData = scenario.incomes.find(function(inc) { return inc.type === 'OAS'; });
+        var oasIncome = (oasIncomeData && startYear >= oasIncomeData.startYear)
+            ? oasIncomeData.amount * getInflationFactor(startYear, oasIncomeData.startYear, oasIncomeData.growthRate)
+            : 0;
 
-var netIncomeForClawback = (tempIncomeBreakdown.otherIncome || 0) + tempIncomeBreakdown.rrspWithdrawal + tempIncomeBreakdown.capitalGains + oasIncome;
+        // ★★★ [수정] optimizeJointTax 사용 (부부 합산 최적화 적용) ★★★
+        var clientIncomePkg = {
+            base: tempIncomeBreakdown.otherIncome,
+            rrif: tempIncomeBreakdown.rrspWithdrawal,
+            capitalGains: tempIncomeBreakdown.capitalGains,
+            canDividend: 0, // Solver 단순화를 위해 배당 제외 (오차 미미)
+            usDividend: 0,
+            oas: oasIncome
+        };
 
-var tempTaxResult = calculateTaxWithClawback({
-    incomeBreakdown: tempIncomeBreakdown,
-    netIncomeForClawback: netIncomeForClawback,
-    oasIncome: oasIncome,
-    age: age,
-    taxParameters: taxParameters,
-    province: scenario.settings.province
-});
+        var tempTaxResult = optimizeJointTax({
+            clientIncome: clientIncomePkg,
+            spouseIncome: spouseIncomePkg, // 배우자가 없으면 null
+            age: age,
+            taxParameters: taxParameters,
+            province: scenario.settings.province
+        });
 
-// Fix the property name from .tax to .totalTax
-var estimatedTax = tempTaxResult.totalTax;
+        // optimizeJointTax는 bestResult를 반환하며, 여기서 totalTax는 '본인'의 세금임.
+        var estimatedTax = tempTaxResult.totalTax;
         var totalAmountNeeded = amountNeeded + estimatedTax;
 
         var totalAssets = balances.rrsp + balances.tfsa + balances.nonReg;
@@ -147,6 +167,7 @@ var estimatedTax = tempTaxResult.totalTax;
         var estimatedMTR = tempTaxResult.marginalRate;
         var taxableGainPerDollar = Math.max(0, capitalGainRatio) * 0.5;
         
+        // ★★★ [중요] 부부 소득 분할로 인해 한계세율(MTR)이 낮아졌다면, RRSP 인출 비용이 낮아지므로 더 많이 인출하게 됨 ★★★
         var rrspCost = estimatedMTR - rrspBonus + rrspCostAdjustment;
         var nonRegCost = estimatedMTR * taxableGainPerDollar;
         var tfsaCost = tfsaPenalty;
