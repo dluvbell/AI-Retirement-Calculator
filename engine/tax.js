@@ -1,4 +1,4 @@
-// --- tax.js ---
+// --- engine/tax.js ---
 
 var taxData_2025 = {
     federal: {
@@ -117,7 +117,6 @@ var calculateBracketTax = function (income, brackets, rates) {
     return { total: tax, breakdown: taxByBracket };
 };
 
-// ★★★ [수정] 퀘벡(QC) 세금 계산 함수가 상세 객체를 반환하도록 수정 (생략 없음) ★★★
 var calculateTaxQC = function (incomeBreakdown, age, taxParams) {
     var provRules = taxParams.provincial;
     var canadianDividend = incomeBreakdown.canadianDividend || 0;
@@ -145,7 +144,7 @@ var calculateTaxQC = function (incomeBreakdown, age, taxParams) {
         credits: {
             bpa: provBpaCredit,
             age: provAgeAmountCredit,
-            pension: 0, // QC does not have a separate pension credit like federal
+            pension: 0, 
             dividend: provincialDTC,
             total: totalProvCredits
         },
@@ -205,7 +204,7 @@ var calculateTax = function (incomeBreakdown, age, taxParams, province) {
     if (province && province.toUpperCase() === 'QC') {
         var quebecAbatement = fedTaxResult.total * 0.165;
         totalFedTax = Math.max(0, totalFedTax - quebecAbatement);
-        federalResult.finalTax = totalFedTax; // Update final tax after abatement
+        federalResult.finalTax = totalFedTax; 
         federalResult.quebecAbatement = quebecAbatement;
 
         provincialResult = calculateTaxQC(incomeBreakdown, age, taxParams);
@@ -218,7 +217,6 @@ var calculateTax = function (incomeBreakdown, age, taxParams, province) {
         var surtax = 0;
         
         if (provRules.surtax || provRules.healthSurtax) {
-            // Surtax calculation logic remains here for brevity in this example
             baseProvTax += surtax;
         }
         
@@ -295,4 +293,102 @@ var calculateTaxWithClawback = function (params) {
         marginalRate: taxResult.marginalRate,
         details: Object.assign(Object.assign({}, taxResult.breakdown), { oasClawback: oasClawback })
     };
+};
+
+// ★★★ [신설] 부부 합산 세금 최적화 (Pension Splitting) 함수 ★★★
+var optimizeJointTax = function(params) {
+    var clientIncome = params.clientIncome; // { base, rrif, capitalGains, canDividend, usDividend, oas }
+    var spouseIncome = params.spouseIncome; // { base, rrif, capitalGains, canDividend, usDividend, oas }
+    var age = params.age;
+    var taxParameters = params.taxParameters;
+    var province = params.province;
+    
+    // 1. 싱글이거나 배우자 소득 정보가 없는 경우 (기존 방식대로 계산)
+    if (!spouseIncome) {
+        var incomeBreakdown = {
+            otherIncome: (clientIncome.base || 0) + (clientIncome.usDividend || 0),
+            rrspWithdrawal: clientIncome.rrif || 0,
+            canadianDividend: clientIncome.canDividend || 0,
+            capitalGains: clientIncome.capitalGains || 0
+        };
+        var netIncomeForClawback = (clientIncome.base || 0) + (clientIncome.rrif || 0) + (clientIncome.capitalGains || 0) + (clientIncome.canDividend || 0) * 1.38 + (clientIncome.usDividend || 0) + (clientIncome.oas || 0);
+        
+        return calculateTaxWithClawback({
+            incomeBreakdown: incomeBreakdown,
+            netIncomeForClawback: netIncomeForClawback,
+            oasIncome: clientIncome.oas || 0,
+            age: age,
+            taxParameters: taxParameters,
+            province: province
+        });
+    }
+
+    // 2. 부부 최적화 케이스 (Pension Splitting Loop)
+    // Python 로직과 동일하게 0% ~ 50% (5% 단위) 탐색
+    var eligiblePension = clientIncome.rrif || 0; // 본인의 Pension Income (Split 대상)
+    var minTotalTax = Infinity;
+    var bestResult = null;
+    
+    // 65세 미만이면 스플릿 불가 (0%만 실행)
+    var splitRatios = (age < 65) ? [0.0] : [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50];
+
+    for (var i = 0; i < splitRatios.length; i++) {
+        var ratio = splitRatios[i];
+        var splitAmount = eligiblePension * ratio;
+
+        // [본인] 소득 재구성 (스플릿 금액 차감)
+        var clientBreakdown = {
+            otherIncome: (clientIncome.base || 0) + (clientIncome.usDividend || 0),
+            rrspWithdrawal: eligiblePension - splitAmount,
+            canadianDividend: clientIncome.canDividend || 0,
+            capitalGains: clientIncome.capitalGains || 0
+        };
+        var clientNetIncome = (clientBreakdown.otherIncome) + clientBreakdown.rrspWithdrawal + clientBreakdown.capitalGains + clientBreakdown.canadianDividend * 1.38 + (clientIncome.oas || 0);
+        
+        var clientTaxRes = calculateTaxWithClawback({
+            incomeBreakdown: clientBreakdown,
+            netIncomeForClawback: clientNetIncome,
+            oasIncome: clientIncome.oas || 0,
+            age: age,
+            taxParameters: taxParameters,
+            province: province
+        });
+
+        // [배우자] 소득 재구성 (스플릿 금액 가산)
+        var spouseBreakdown = {
+            otherIncome: (spouseIncome.base || 0) + (spouseIncome.usDividend || 0),
+            rrspWithdrawal: (spouseIncome.rrif || 0) + splitAmount, // 받은 연금은 RRIF처럼 과세
+            canadianDividend: spouseIncome.canDividend || 0,
+            capitalGains: spouseIncome.capitalGains || 0
+        };
+        var spouseNetIncome = (spouseBreakdown.otherIncome) + spouseBreakdown.rrspWithdrawal + spouseBreakdown.capitalGains + spouseBreakdown.canadianDividend * 1.38 + (spouseIncome.oas || 0);
+        
+        // 배우자 나이 추정 (Python과 동일하게 본인 나이로 가정하거나 별도 파라미터 필요하지만, 여기선 본인 나이 사용)
+        // 정확도를 위해선 배우자 나이도 받아야 하지만, 현재 구조상 age 사용
+        var spouseTaxRes = calculateTaxWithClawback({
+            incomeBreakdown: spouseBreakdown,
+            netIncomeForClawback: spouseNetIncome,
+            oasIncome: spouseIncome.oas || 0,
+            age: age, 
+            taxParameters: taxParameters,
+            province: province
+        });
+
+        var currentTotalTax = clientTaxRes.totalTax + spouseTaxRes.totalTax;
+
+        if (currentTotalTax < minTotalTax) {
+            minTotalTax = currentTotalTax;
+            bestResult = {
+                totalTax: clientTaxRes.totalTax, // 본인 세금 (최적화된) 반환
+                spouseTax: spouseTaxRes.totalTax,
+                oasClawback: clientTaxRes.oasClawback,
+                marginalRate: clientTaxRes.marginalRate,
+                details: clientTaxRes.details,
+                splitRatio: ratio,
+                splitAmount: splitAmount
+            };
+        }
+    }
+    
+    return bestResult;
 };
