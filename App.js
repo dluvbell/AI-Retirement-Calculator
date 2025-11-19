@@ -32,7 +32,8 @@ const App = () => {
     const [progress, setProgress] = React.useState({ message: '', percentage: 0 });
     const [error, setError] = React.useState(null);
     const [apiStatus, setApiStatus] = React.useState({ ai: null, baseline: null });
-    const [devMode, setDevMode] = React.useState(false);
+    
+    // ★★★ [수정] devMode 상태 제거됨 ★★★
     
     const [simulationWorker, setSimulationWorker] = React.useState(null);
     
@@ -59,7 +60,7 @@ const App = () => {
         return () => {
             worker.terminate();
         };
-    }, [activeScenario.id]); // activeScenario.id가 바뀔 때마다 (예: 삭제) 워커를 재설정할 필요는 없을 수 있으나, 일단 유지
+    }, [activeScenario.id]); 
     
     // --- 시나리오 관리 핸들러 ---
     const handleAddScenario = () => {
@@ -111,7 +112,6 @@ const App = () => {
     const handleSettingsChange = (key, value) => {
         setScenarios(prev => prev.map(s => {
             if (s.id === activeScenarioId) {
-                // dot notation (예: 'portfolio.useSimpleMode')을 처리
                 const keys = key.split('.');
                 if (keys.length > 1) {
                     const newSettings = { ...s.settings };
@@ -154,12 +154,9 @@ const App = () => {
         setProgress({ message: 'Starting Baseline Monte Carlo...', percentage: 0 });
         
         try {
-            // [버그 수정] simulation.js가 advancedSettings를 참조하도록 수정 (simulation.js 파일 자체도 수정 필요)
-            // const scenarioForWorker = { ...scenario.settings }; 
-            // -> App.js는 시나리오 객체 전체를 보내야 함 (simulation.js가 settings를 참조)
             simulationWorker.postMessage({
                 scenario: scenario, 
-                runs: 100 // 몬테카를로 횟수 (임시)
+                runs: 100 
             });
         } catch (err) {
             console.error("Standard sim error:", err);
@@ -198,7 +195,6 @@ const App = () => {
                     detailedLog: data.detailed_log.ai_log || []
                 }
             }));
-            // AI 시뮬레이션이 Baseline 데이터도 반환하므로 함께 저장
             setStandardResults(prev => ({
                 ...prev,
                 [scenario.id]: {
@@ -224,10 +220,7 @@ const App = () => {
     }
 
     return (
-    // ★★★ [레이아웃 수정] 'display: flex'를 제거하여 2단 분리를 없앱니다. ★★★
     <div style={{minHeight: '100vh', backgroundColor: '#111827', color: 'white'}}>
-        
-        {/* ★★★ [레이아웃 수정] width, border, height, overflow를 제거하고, maxWidth와 margin을 주어 중앙 정렬합니다. ★★★ */}
         <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <h2 style={{fontSize: '24px', fontWeight: '600', marginBottom: '20px'}}>Retirement Planner</h2>
             <BasicSettings scenario={activeScenario} onUpdate={handleSettingsChange} />
@@ -236,18 +229,6 @@ const App = () => {
             <IncomesExpenses scenario={activeScenario} onUpdate={handleSettingsChange} />
         </div>
         
-        {/* ★★★ [레이아DDS
-.layout-options-container {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 20px;
-}
-.layout-options-container {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 20px;
-}
-아웃 수정] flex: 1, height, overflow를 제거하고, maxWidth와 margin을 주어 중앙 정렬합니다. ★★★ */}
         <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <ScenarioManager 
                 scenarios={scenarios}
@@ -340,13 +321,7 @@ const App = () => {
                         </div>
                     </div>
                 </div>
-                <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" checked={devMode} onChange={e => setDevMode(e.target.checked)} className="sr-only peer" />
-                        <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
-                    <span className="text-sm font-medium text-gray-300">Show Developer Details</span>
-                </div>
+                {/* ★★★ [수정] Show Developer Details 토글 제거됨 ★★★ */}
             </div>
             </div>
 
@@ -356,8 +331,7 @@ const App = () => {
                     aiResults={aiResults}
                     scenarios={scenarios}
                     activeScenario={activeScenario}
-                    devMode={devMode}
-	                colors={SCENARIO_COLORS}
+                    colors={SCENARIO_COLORS}
                 />
             </div>
         </div>
