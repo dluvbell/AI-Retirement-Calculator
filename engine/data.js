@@ -6,11 +6,11 @@
  */
 
 // [AI 2.0] 6개 자산군 정의 (JS 프론트엔드용 키)
-const ASSET_KEYS = ['growth', 'balanced', 'dividend_can', 'dividend_us', 'bond', 'gic'];
+var ASSET_KEYS = ['growth', 'balanced', 'dividend_can', 'dividend_us', 'bond', 'gic'];
 
 // 1. 기본 자산 프로파일 (6개 자산군)
 // [수정] 모든 비율을 100을 곱한 값으로 변경 (예: 0.08 -> 8)
-const DEFAULT_ASSET_PROFILES = {
+var DEFAULT_ASSET_PROFILES = {
     growth: { name: 'Growth Stocks', growth: 8.0, dividend: 0.5, volatility: 18.0, dividend_growth: 5.0 },
     balanced: { name: 'Balanced Stocks', growth: 5.0, dividend: 1.5, volatility: 12.0, dividend_growth: 4.0 },
     dividend_can: { name: 'CAN Dividend', growth: 3.0, dividend: 4.0, volatility: 10.0, dividend_growth: 3.0 },
@@ -22,7 +22,7 @@ const DEFAULT_ASSET_PROFILES = {
 
 // 2. 기본 포트폴리오 (6개 자산군)
 // [수정] 모든 비율을 100을 곱한 값으로 변경 (예: 0.50 -> 50)
-const DEFAULT_PORTFOLIO = {
+var DEFAULT_PORTFOLIO = {
     useSimpleMode: true,
     // 간단 모드 (글라이드패스)
     startComposition: {
@@ -44,11 +44,11 @@ const DEFAULT_PORTFOLIO = {
 };
 
 // 3. 기본 고급 설정 (6개 자산군)
-const DEFAULT_ADVANCED_SETTINGS = {
+// ★★★ [수정] LIRA 및 LIF 기본 설정 추가 (UI 충돌 방지) ★★★
+var DEFAULT_ADVANCED_SETTINGS = {
     tfsa: {
         override: false,
         holdings: { growth: 60000, balanced: 10000, dividend_can: 0, dividend_us: 0, bond: 30000, gic: 0 },
-        // ACB는 Non-Reg에만 의미가 있으므로 TFSA/RRSP에서는 0으로 설정
         acb: { growth: 0, balanced: 0, dividend_can: 0, dividend_us: 0, bond: 0, gic: 0 }
     },
     rrsp: {
@@ -59,25 +59,34 @@ const DEFAULT_ADVANCED_SETTINGS = {
     nonReg: {
         override: false,
         holdings: { growth: 200000, balanced: 50000, dividend_can: 0, dividend_us: 0, bond: 50000, gic: 0 },
-        // Non-Reg는 ACB(투자 원금)가 매우 중요합니다.
         acb: { growth: 150000, balanced: 40000, dividend_can: 0, dividend_us: 0, bond: 45000, gic: 0 }
+    },
+    lira: {
+        override: false,
+        holdings: { growth: 0, balanced: 0, dividend_can: 0, dividend_us: 0, bond: 0, gic: 0 },
+        acb: { growth: 0, balanced: 0, dividend_can: 0, dividend_us: 0, bond: 0, gic: 0 }
+    },
+    lif: {
+        override: false,
+        holdings: { growth: 0, balanced: 0, dividend_can: 0, dividend_us: 0, bond: 0, gic: 0 },
+        acb: { growth: 0, balanced: 0, dividend_can: 0, dividend_us: 0, bond: 0, gic: 0 }
     }
 };
 
 // 4. 기본 수입 및 지출
-const DEFAULT_INCOMES = [
+var DEFAULT_INCOMES = [
     // [수정] growthRate를 100 곱한 값으로 변경 (예: 0.025 -> 2.5)
     { id: 1, type: 'CPP', amount: 15000, startYear: 2050, endYear: 2085, growthRate: 2.5 },
     { id: 2, type: 'OAS', amount: 8000, startYear: 2050, endYear: 2085, growthRate: 2.5 }
 ];
 
-const DEFAULT_EXPENSES = [
+var DEFAULT_EXPENSES = [
     // [수정] growthRate를 100 곱한 값으로 변경 (예: 0.025 -> 2.5)
     { id: 1, type: 'Living Expenses', amount: 50000, startYear: 2035, endYear: 2085, growthRate: 2.5 }
 ];
 
 // 5. 기본 일회성 이벤트 (세금 유형 포함)
-const DEFAULT_ONE_TIME_EVENTS = [
+var DEFAULT_ONE_TIME_EVENTS = [
     { 
         id: 1, 
         year: 2040, 
@@ -100,12 +109,12 @@ const DEFAULT_ONE_TIME_EVENTS = [
 ];
 
 // 6. 몬테카를로 설정
-const DEFAULT_MONTE_CARLO = {
+var DEFAULT_MONTE_CARLO = {
     simulationCount: 1000
 };
 
 // ★★★ [신설] LIRA/LIF 설정 기본값 ★★★
-const DEFAULT_LOCKED_IN_SETTINGS = {
+var DEFAULT_LOCKED_IN_SETTINGS = {
     conversionAge: 71,       // LIRA -> LIF 전환 나이
     unlockingPercent: 50.0,  // 전환 시 Unlocking 비율 (예: 50%)
     cansimRate: 3.5          // LIF Max 계산용 장기 국채 금리 (%)
@@ -116,7 +125,6 @@ const DEFAULT_LOCKED_IN_SETTINGS = {
  * @param {string} name - 새 시나리오의 이름
  * @returns {object} - 시나리오 기본값이 채워진 객체
  */
-// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var createNewScenario = (name) => {
     const currentYear = new Date().getFullYear();
     const birthYear = 1980;
@@ -175,7 +183,6 @@ var createNewScenario = (name) => {
  * @param {object} scenario - 검사할 시나리오 객체
  * @returns {object} - { isValid: boolean, errors: string[] }
  */
-// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var validateScenario = (scenario) => {
     const errors = [];
     const settings = scenario.settings;
@@ -239,7 +246,6 @@ var validateScenario = (scenario) => {
  * @param {object} scenario - 프론트엔드의 활성 시나리오 객체
  * @returns {object} - Python 서버의 /simulate 엔드포인트로 전송될 JSON 객체
  */
-// ★★★ [스코프 버그 수정] 'const'를 'var'로 변경 ★★★
 var createApiPayload = (scenario) => {
     
     // 1. 프론트엔드 키(JS)를 백엔드 키(Python)로 매핑합니다.
@@ -271,14 +277,17 @@ var createApiPayload = (scenario) => {
     // 3. 고급 자산 배분 변환 (이름 매핑)
     const mappedAdvancedAssets = {};
     const advancedSettings = scenario.settings.advancedSettings;
-    ['tfsa', 'rrsp', 'nonReg'].forEach(acctKey => {
+    // ★★★ [수정] LIRA/LIF 포함하여 반복하도록 수정 (데이터 전송 누락 해결) ★★★
+    ['tfsa', 'rrsp', 'nonReg', 'lira', 'lif'].forEach(acctKey => {
         mappedAdvancedAssets[acctKey] = {};
-        for (const key_js in advancedSettings[acctKey].holdings) {
-            const key_py = assetProfileMap[key_js]; // JS 키를 Python 키로 변환
-            if (key_py) {
-                mappedAdvancedAssets[acctKey][key_py] = advancedSettings[acctKey].override 
-                    ? advancedSettings[acctKey].holdings[key_js]
-                    : 0; 
+        if (advancedSettings[acctKey] && advancedSettings[acctKey].holdings) {
+            for (const key_js in advancedSettings[acctKey].holdings) {
+                const key_py = assetProfileMap[key_js]; // JS 키를 Python 키로 변환
+                if (key_py) {
+                    mappedAdvancedAssets[acctKey][key_py] = advancedSettings[acctKey].override 
+                        ? advancedSettings[acctKey].holdings[key_js]
+                        : 0; 
+                }
             }
         }
     });
@@ -328,9 +337,9 @@ var createApiPayload = (scenario) => {
             tfsa: scenario.settings.advancedSettings.tfsa.override ? Object.values(scenario.settings.advancedSettings.tfsa.holdings).reduce((s, v) => s + v, 0) : scenario.settings.initialBalances.tfsa,
             rrsp: scenario.settings.advancedSettings.rrsp.override ? Object.values(scenario.settings.advancedSettings.rrsp.holdings).reduce((s, v) => s + v, 0) : scenario.settings.initialBalances.rrsp,
             non_reg: scenario.settings.advancedSettings.nonReg.override ? Object.values(scenario.settings.advancedSettings.nonReg.holdings).reduce((s, v) => s + v, 0) : scenario.settings.initialBalances.nonReg,
-            // ★★★ [신설] LIRA/LIF 잔액 전달 ★★★
-            lira: scenario.settings.initialBalances.lira || 0,
-            lif: scenario.settings.initialBalances.lif || 0
+            // ★★★ [수정] LIRA/LIF도 Override 체크 후 값 전달 ★★★
+            lira: scenario.settings.advancedSettings.lira.override ? Object.values(scenario.settings.advancedSettings.lira.holdings).reduce((s, v) => s + v, 0) : (scenario.settings.initialBalances.lira || 0),
+            lif: scenario.settings.advancedSettings.lif.override ? Object.values(scenario.settings.advancedSettings.lif.holdings).reduce((s, v) => s + v, 0) : (scenario.settings.initialBalances.lif || 0)
         },
         chequing_min: scenario.settings.initialBalances.minChecking,
         chequing_max: scenario.settings.initialBalances.maxChecking,
