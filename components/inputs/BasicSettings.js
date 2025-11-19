@@ -4,13 +4,30 @@ const BasicSettings = ({ scenario, onUpdate }) => {
     const { province, birthYear, startYear, endYear } = scenario.settings;
     const lifeExpectancy = endYear - birthYear;
 
+    // ★★★ [신설] 주별 LIRA Unlocking 규정 데이터 ★★★
+    const UNLOCKING_RULES = {
+        'ON': { limit: 50, text: "Ontario allows 50% unlocking to RRSP/Cash within 60 days of transfer to LIF." },
+        'AB': { limit: 50, text: "Alberta allows 50% unlocking to RRSP/Cash." },
+        'MB': { limit: 50, text: "Manitoba allows 50% unlocking." },
+        'SK': { limit: 0, text: "Saskatchewan generally does not allow one-time unlocking (0%)." },
+        'BC': { limit: 0, text: "BC generally does not allow one-time unlocking (0%), except for small balances." },
+        'QC': { limit: 0, text: "Quebec generally does not allow one-time unlocking (0%)." },
+        'NS': { limit: 0, text: "Nova Scotia generally does not allow one-time unlocking (0%)." },
+        'NB': { limit: 0, text: "New Brunswick generally does not allow one-time unlocking (0%)." },
+        'NL': { limit: 0, text: "Newfoundland generally does not allow one-time unlocking (0%)." },
+        'PE': { limit: 0, text: "PEI generally does not allow one-time unlocking (0%)." },
+        'FED': { limit: 50, text: "Federal jurisdiction allows 50% unlocking." } // 참고용
+    };
+
+    const currentRule = UNLOCKING_RULES[province] || { limit: 0, text: "Check your specific provincial legislation." };
+    const userUnlockingPercent = scenario.settings.lockedIn.unlockingPercent || 0;
+    const showWarning = userUnlockingPercent > currentRule.limit;
+
     const handleSettingChange = (key, value) => {
-        // 값이 숫자인 경우, 숫자로 변환해줍니다.
         const numericValue = !isNaN(parseFloat(value)) ? parseFloat(value) : value;
         onUpdate(key, numericValue);
     };
 
-    // --- 드롭다운 메뉴 옵션 생성 ---
     const provinces = [
         { value: 'ON', label: 'Ontario' }, { value: 'QC', label: 'Quebec' },
         { value: 'BC', label: 'British Columbia' }, { value: 'AB', label: 'Alberta' },
@@ -53,7 +70,6 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                 Basic Information
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-                {/* --- 거주 주 선택 --- */}
                 <div>
                     <label style={labelStyle} htmlFor="province">Province</label>
                     <select
@@ -66,7 +82,6 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                     </select>
                 </div>
 
-                {/* --- 출생 연도 선택 --- */}
                 <div>
                     <label style={labelStyle} htmlFor="birthYear">Birth Year</label>
                     <select
@@ -79,7 +94,6 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                     </select>
                 </div>
                 
-                {/* ★★★ 수정된 부분 시작 ★★★ */}
                 <div>
                     <label style={labelStyle} htmlFor="startYear">Retirement Start Year</label>
                     <select
@@ -102,9 +116,7 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                         })()}
                     </select>
                 </div>
-                {/* ★★★ 수정된 부분 끝 ★★★ */}
 
-                {/* --- 기대 수명 선택 --- */}
                 <div>
                     <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}} htmlFor="lifeExpectancy">
                         <span>Life Expectancy</span>
@@ -128,7 +140,6 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                 </div>
             </div>
 
-            {/* ★★★ [신설] LIRA/LIF 설정 섹션 ★★★ */}
             <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', marginTop: '24px', borderTop: '1px solid #374151', paddingTop: '16px' }}>
                 Locked-in Account Settings
             </h3>
@@ -143,16 +154,30 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                         onChange={(e) => handleSettingChange('lockedIn.conversionAge', e.target.value)}
                     />
                 </div>
+                
+                {/* ★★★ [수정] Unlocking % 입력 필드에 가이드 및 경고 메시지 추가 ★★★ */}
                 <div>
                     <label style={labelStyle} htmlFor="unlockingPercent">Unlocking % (to RRSP)</label>
                     <input
                         type="number"
                         id="unlockingPercent"
-                        style={inputStyle}
+                        style={{...inputStyle, borderColor: showWarning ? '#f59e0b' : '#4b5563'}} // 경고 시 노란색 테두리
                         value={scenario.settings.lockedIn.unlockingPercent}
                         onChange={(e) => handleSettingChange('lockedIn.unlockingPercent', e.target.value)}
                     />
+                    {/* 규정 안내 (기본 회색) */}
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+                        {currentRule.text}
+                    </div>
+                    {/* 경고 메시지 (초과 시 노란색) */}
+                    {showWarning && (
+                        <div style={{ fontSize: '12px', color: '#f59e0b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <svg style={{width:'12px', height:'12px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                            <span>High value for {province}. Normally limited to {currentRule.limit}%. (Allowed for small balances)</span>
+                        </div>
+                    )}
                 </div>
+
                 <div>
                     <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}} htmlFor="cansimRate">
                         <span>LIF CANSIM Rate (%)</span>
@@ -171,7 +196,6 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                     />
                 </div>
             </div>
-            {/* ★★★ [신설] LIRA/LIF 설정 섹션 끝 ★★★ */}
         </div>
     );
 };
