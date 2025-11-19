@@ -58,9 +58,7 @@ const App = () => {
         };
     }, [activeScenario.id]); 
     
-    // --- 시나리오 관리 핸들러 ---
     const handleAddScenario = () => {
-        // ★★★ [수정] 최대 시나리오 개수 5개로 증가 ★★★
         if (scenarios.length >= 5) {
             alert("You can add up to 5 scenarios.");
             return;
@@ -71,7 +69,6 @@ const App = () => {
     };
 
     const handleCopyScenario = (idToCopy) => {
-        // ★★★ [수정] 최대 시나리오 개수 5개로 증가 ★★★
         if (scenarios.length >= 5) {
             alert("You can add up to 5 scenarios.");
             return;
@@ -106,7 +103,6 @@ const App = () => {
         setActiveScenarioId(id);
     };
 
-    // --- 설정 변경 핸들러 ---
     const handleSettingsChange = (key, value) => {
         setScenarios(prev => prev.map(s => {
             if (s.id === activeScenarioId) {
@@ -220,7 +216,6 @@ const App = () => {
         <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <h2 style={{fontSize: '24px', fontWeight: '600', marginBottom: '20px'}}>Retirement Planner</h2>
             
-            {/* ★★★ [수정] ScenarioManager를 최상단으로 이동 및 handleAddScenario 전달 ★★★ */}
             <ScenarioManager 
                 scenarios={scenarios}
                 activeScenarioId={activeScenarioId}
@@ -228,7 +223,7 @@ const App = () => {
                 onRenameScenario={handleRenameScenario}
                 onCopyScenario={handleCopyScenario}
                 onDeleteScenario={handleDeleteScenario}
-                onAddScenario={handleAddScenario} // 전달
+                onAddScenario={handleAddScenario} 
                 colors={SCENARIO_COLORS}
             />
             
@@ -240,73 +235,71 @@ const App = () => {
         
         <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <div style={{backgroundColor: '#1f2937', padding: '20px', borderRadius: '8px', marginTop: '20px'}}>
-            <div style={{display: 'flex', gap: '16px', alignItems: 'flex-end'}}>
-                <button 
-                    onClick={() => runAiSimulation(activeScenario)}
-                    style={{
-                        padding: '10px 20px',
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        backgroundColor: apiStatus.ai === 'running' ? '#555' : (apiStatus.ai === 'complete' ? '#16a34a' : '#2563eb'),
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: isLoading ? 'not-allowed' : 'pointer'
-                    }}
-                    disabled={isLoading}
-                >
-                    {apiStatus.ai === 'running' ? 'Running AI...' : (apiStatus.ai === 'complete' ? 'Run AI Simulation (Done)' : 'Run AI Simulation')}
-                </button>
-                
-                <button 
-                    onClick={() => runStandardSimulation(activeScenario)}
-                    style={{
-                        padding: '10px 20px',
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        backgroundColor: apiStatus.baseline === 'running' ? '#555' : (apiStatus.baseline === 'complete' ? '#16a34a' : '#4b5563'),
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: isLoading ? 'not-allowed' : 'pointer'
-                    }}
-                    disabled={isLoading}
-                >
-                    {apiStatus.baseline === 'running' ? 'Running Baseline...' : (apiStatus.baseline === 'complete' ? 'Run Baseline (Done)' : 'Run Baseline (JS)')}
-                </button>
+                {/* ★★★ [수정] 버튼 레이아웃 통합 (실행 버튼 + 유틸리티 버튼) ★★★ */}
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    
+                    {/* 왼쪽 그룹: 실행 버튼 & 상태 */}
+                    <div style={{display: 'flex', gap: '16px', alignItems: 'center', flex: 1}}>
+                        <button 
+                            onClick={() => runAiSimulation(activeScenario)}
+                            style={{
+                                padding: '10px 20px', fontSize: '16px', fontWeight: '600',
+                                backgroundColor: apiStatus.ai === 'running' ? '#555' : (apiStatus.ai === 'complete' ? '#16a34a' : '#2563eb'),
+                                color: 'white', border: 'none', borderRadius: '6px', cursor: isLoading ? 'not-allowed' : 'pointer',
+                                whiteSpace: 'nowrap'
+                            }}
+                            disabled={isLoading}
+                        >
+                            {apiStatus.ai === 'running' ? 'Running AI...' : (apiStatus.ai === 'complete' ? 'Run AI (Done)' : 'Run AI Simulation')}
+                        </button>
+                        
+                        <button 
+                            onClick={() => runStandardSimulation(activeScenario)}
+                            style={{
+                                padding: '10px 20px', fontSize: '16px', fontWeight: '600',
+                                backgroundColor: apiStatus.baseline === 'running' ? '#555' : (apiStatus.baseline === 'complete' ? '#16a34a' : '#4b5563'),
+                                color: 'white', border: 'none', borderRadius: '6px', cursor: isLoading ? 'not-allowed' : 'pointer',
+                                whiteSpace: 'nowrap'
+                            }}
+                            disabled={isLoading}
+                        >
+                            {apiStatus.baseline === 'running' ? 'Running...' : (apiStatus.baseline === 'complete' ? 'Baseline (Done)' : 'Run Baseline')}
+                        </button>
 
-                {isLoading && (
-                    <div style={{flex: 1, color: '#d1d5db'}}>
-                        <div style={{fontSize: '14px', marginBottom: '4px'}}>{progress.message}</div>
-                        <div style={{height: '6px', backgroundColor: '#374151', borderRadius: '3px', overflow: 'hidden'}}>
-                            <div style={{width: `${progress.percentage}%`, height: '100%', backgroundColor: '#a5f3fc', transition: 'width 0.2s'}}></div>
+                        {/* 로딩 바 (남는 공간 차지) */}
+                        {isLoading ? (
+                            <div style={{flex: 1, maxWidth: '300px', marginLeft: '10px', color: '#d1d5db'}}>
+                                <div style={{fontSize: '12px', marginBottom: '2px'}}>{progress.message}</div>
+                                <div style={{height: '6px', backgroundColor: '#374151', borderRadius: '3px', overflow: 'hidden'}}>
+                                    <div style={{width: `${progress.percentage}%`, height: '100%', backgroundColor: '#a5f3fc', transition: 'width 0.2s'}}></div>
+                                </div>
+                            </div>
+                        ) : (
+                             error && <div style={{color: '#f87171', fontSize: '14px', marginLeft: '10px'}}>{error}</div>
+                        )}
+                    </div>
+
+                    {/* 오른쪽 그룹: 유틸리티 버튼 */}
+                    <div style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
+                        <button onClick={() => alert('Export functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Export</button>
+                        <button onClick={() => alert('Import functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Import</button>
+                        <div style={{position: 'relative'}}>
+                            <select 
+                                onChange={(e) => alert(e.target.value)} 
+                                style={{
+                                    padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', 
+                                    color: 'white', border: 'none', borderRadius: '6px', 
+                                    cursor: 'pointer', appearance: 'none', paddingRight: '30px',
+                                    width: 'auto' // [수정] 너비 자동 조절
+                                }}
+                            >
+                                <option value="">Load Template</option>
+                                <option value="template1">Aggressive Growth</option>
+                                <option value="template2">Conservative (Capital Preservation)</option>
+                            </select>
                         </div>
                     </div>
-                )}
-                {error && <div style={{color: '#f87171', fontSize: '14px', flex: 1}}>{error}</div>}
-            </div>
-            
-            {/* ★★★ [수정] 하단 버튼 그룹 정리 (Add Scenario 삭제, Export/Import 유지) ★★★ */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '20px' }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => alert('Export functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Export</button>
-                    <button onClick={() => alert('Import functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Import</button>
-                    <div style={{position: 'relative'}}>
-                        <select 
-                            onChange={(e) => alert(e.target.value)} 
-                            style={{
-                                padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', 
-                                color: 'white', border: 'none', borderRadius: '6px', 
-                                cursor: 'pointer', appearance: 'none', paddingRight: '30px'
-                            }}
-                        >
-                            <option value="">Load Template</option>
-                            <option value="template1">Aggressive Growth</option>
-                            <option value="template2">Conservative (Capital Preservation)</option>
-                        </select>
-                    </div>
                 </div>
-            </div>
             </div>
 
             <div className="w-full mt-5">
