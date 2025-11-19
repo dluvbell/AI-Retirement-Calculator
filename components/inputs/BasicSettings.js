@@ -4,7 +4,17 @@ const BasicSettings = ({ scenario, onUpdate }) => {
     const { province, birthYear, startYear, endYear } = scenario.settings;
     const lifeExpectancy = endYear - birthYear;
 
-    // ★★★ [신설] 주별 LIRA Unlocking 규정 데이터 ★★★
+    // ★★★ [신설] 배우자 설정 데이터 초기화 (없으면 기본값 생성) ★★★
+    // 기존 시나리오에 spouse 데이터가 없을 수 있으므로 안전하게 초기화합니다.
+    const spouse = scenario.settings.spouse || {
+        hasSpouse: false,
+        birthYear: birthYear, // 기본값: 본인과 동일
+        pensionIncome: 0,
+        baseIncome: 0,
+        optimizeCppSharing: false,
+        useSpouseAgeForRrif: false
+    };
+
     const UNLOCKING_RULES = {
         'ON': { limit: 50, text: "Ontario allows 50% unlocking to RRSP/Cash within 60 days of transfer to LIF." },
         'AB': { limit: 50, text: "Alberta allows 50% unlocking to RRSP/Cash." },
@@ -16,16 +26,28 @@ const BasicSettings = ({ scenario, onUpdate }) => {
         'NB': { limit: 0, text: "New Brunswick generally does not allow one-time unlocking (0%)." },
         'NL': { limit: 0, text: "Newfoundland generally does not allow one-time unlocking (0%)." },
         'PE': { limit: 0, text: "PEI generally does not allow one-time unlocking (0%)." },
-        'FED': { limit: 50, text: "Federal jurisdiction allows 50% unlocking." } // 참고용
+        'FED': { limit: 50, text: "Federal jurisdiction allows 50% unlocking." }
     };
 
     const currentRule = UNLOCKING_RULES[province] || { limit: 0, text: "Check your specific provincial legislation." };
-    const userUnlockingPercent = scenario.settings.lockedIn.unlockingPercent || 0;
+    const userUnlockingPercent = scenario.settings.lockedIn ? scenario.settings.lockedIn.unlockingPercent : 0;
     const showWarning = userUnlockingPercent > currentRule.limit;
 
     const handleSettingChange = (key, value) => {
         const numericValue = !isNaN(parseFloat(value)) ? parseFloat(value) : value;
         onUpdate(key, numericValue);
+    };
+
+    // ★★★ [신설] 배우자 설정 변경 핸들러 ★★★
+    const handleSpouseChange = (key, value) => {
+        // 숫자로 변환해야 하는 필드들
+        const numericValue = (key === 'birthYear' || key === 'pensionIncome' || key === 'baseIncome') 
+            ? (parseFloat(value) || 0) 
+            : value;
+        
+        // 기존 spouse 객체를 복사하고 값을 업데이트한 뒤, 전체 설정을 업데이트
+        const newSpouseSettings = { ...spouse, [key]: numericValue };
+        onUpdate('spouse', newSpouseSettings);
     };
 
     const provinces = [
@@ -62,6 +84,13 @@ const BasicSettings = ({ scenario, onUpdate }) => {
         fontSize: '14px',
         fontWeight: '500',
         marginBottom: '4px'
+    };
+
+    const checkboxStyle = {
+        width: '16px',
+        height: '16px',
+        marginRight: '8px',
+        cursor: 'pointer'
     };
 
     return (
@@ -129,16 +158,96 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                     <select
                         id="lifeExpectancy"
                         style={inputStyle}
-                        value={lifeExpectancy}
-                        onChange={(e) => {
-                            const newEndYear = birthYear + parseInt(e.target.value, 10);
-                            handleSettingChange('endYear', newEndYear);
-                        }}
+                        value={endYear - birthYear}
+                        onChange={(e) => handleSettingChange('endYear', birthYear + parseInt(e.target.value, 10))}
                     >
                         {lifeExpectancyOptions.map(age => <option key={age} value={age}>{age}</option>)}
                     </select>
                 </div>
             </div>
+
+            {/* ★★★ [신설] Spouse Settings 섹션 ★★★ */}
+            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', marginTop: '24px', borderTop: '1px solid #374151', paddingTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                Spouse Information
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '14px', fontWeight: 'normal', cursor: 'pointer', color: '#a5f3fc' }}>
+                    <input 
+                        type="checkbox" 
+                        checked={spouse.hasSpouse} 
+                        onChange={(e) => handleSpouseChange('hasSpouse', e.target.checked)} 
+                        style={checkboxStyle} 
+                    />
+                    Has Spouse?
+                </label>
+            </h3>
+
+            {spouse.hasSpouse && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                    <div>
+                        <label style={labelStyle}>Spouse Birth Year</label>
+                        <select
+                            style={inputStyle}
+                            value={spouse.birthYear}
+                            onChange={(e) => handleSpouseChange('birthYear', e.target.value)}
+                        >
+                            {birthYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}}>
+                            <span>Pension Income ($/yr)</span>
+                            <Tooltip text="Eligible for Pension Income Splitting (e.g., RRIF, LIF, DB Pension). Can be split up to 50% with spouse.">
+                                <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                </svg>
+                            </Tooltip>
+                        </label>
+                        <input
+                            type="number"
+                            style={inputStyle}
+                            value={spouse.pensionIncome}
+                            onChange={(e) => handleSpouseChange('pensionIncome', e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}}>
+                            <span>Base Income ($/yr)</span>
+                            <Tooltip text="Not eligible for splitting (e.g., OAS, CPP, Employment Income). Note: Check 'Optimize CPP Sharing' below to split CPP.">
+                                <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                </svg>
+                            </Tooltip>
+                        </label>
+                        <input
+                            type="number"
+                            style={inputStyle}
+                            value={spouse.baseIncome}
+                            onChange={(e) => handleSpouseChange('baseIncome', e.target.value)}
+                        />
+                    </div>
+                    
+                    {/* 전략 토글 스위치들 */}
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '20px', marginTop: '8px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '14px', cursor: 'pointer', color: '#e5e7eb' }}>
+                            <input 
+                                type="checkbox" 
+                                checked={spouse.optimizeCppSharing} 
+                                onChange={(e) => handleSpouseChange('optimizeCppSharing', e.target.checked)} 
+                                style={checkboxStyle} 
+                            />
+                            Optimize CPP Sharing (50:50)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', fontSize: '14px', cursor: 'pointer', color: '#e5e7eb' }}>
+                            <input 
+                                type="checkbox" 
+                                checked={spouse.useSpouseAgeForRrif} 
+                                onChange={(e) => handleSpouseChange('useSpouseAgeForRrif', e.target.checked)} 
+                                style={checkboxStyle} 
+                            />
+                            Use Spouse Age for RRIF Minimum
+                        </label>
+                    </div>
+                </div>
+            )}
 
             <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', marginTop: '24px', borderTop: '1px solid #374151', paddingTop: '16px' }}>
                 Locked-in Account Settings
@@ -150,7 +259,7 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                         type="number"
                         id="conversionAge"
                         style={inputStyle}
-                        value={scenario.settings.lockedIn.conversionAge}
+                        value={scenario.settings.lockedIn ? scenario.settings.lockedIn.conversionAge : 71}
                         onChange={(e) => handleSettingChange('lockedIn.conversionAge', e.target.value)}
                     />
                 </div>
@@ -162,7 +271,7 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                         type="number"
                         id="unlockingPercent"
                         style={{...inputStyle, borderColor: showWarning ? '#f59e0b' : '#4b5563'}}
-                        value={scenario.settings.lockedIn.unlockingPercent}
+                        value={scenario.settings.lockedIn ? scenario.settings.lockedIn.unlockingPercent : 0}
                         onChange={(e) => handleSettingChange('lockedIn.unlockingPercent', e.target.value)}
                     />
                     <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
@@ -176,7 +285,7 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                     )}
                 </div>
 
-                {/* ★★★ [수정] CANSIM Rate 툴팁 개선 ★★★ */}
+                {/* CANSIM Rate 툴팁 개선 */}
                 <div>
                     <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}} htmlFor="cansimRate">
                         <span>LIF CANSIM Rate (%)</span>
@@ -190,7 +299,7 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                         type="number"
                         id="cansimRate"
                         style={inputStyle}
-                        value={scenario.settings.lockedIn.cansimRate}
+                        value={scenario.settings.lockedIn ? scenario.settings.lockedIn.cansimRate : 3.5}
                         onChange={(e) => handleSettingChange('lockedIn.cansimRate', e.target.value)}
                     />
                 </div>
