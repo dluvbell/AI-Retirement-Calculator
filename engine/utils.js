@@ -96,6 +96,18 @@ var generateVerificationCSV = (scenario, resultLog, fileName) => {
     csvContent += `Conversion Age,${scenario.settings.lockedIn.conversionAge}\n`;
     csvContent += `Unlocking %,${scenario.settings.lockedIn.unlockingPercent}\n`;
 
+    // ★★★ [추가] 배우자 설정 정보 (검증용) ★★★
+    const spouse = scenario.settings.spouse || {};
+    csvContent += "\n--- SPOUSE SETTINGS ---\n";
+    csvContent += `Has Spouse,${spouse.hasSpouse ? 'Yes' : 'No'}\n`;
+    if (spouse.hasSpouse) {
+        csvContent += `Spouse Birth Year,${spouse.birthYear}\n`;
+        csvContent += `Pension Income,${spouse.pensionIncome}\n`;
+        csvContent += `Base Income,${spouse.baseIncome}\n`;
+        csvContent += `Optimize CPP Sharing,${spouse.optimizeCppSharing ? 'Yes' : 'No'}\n`;
+        csvContent += `Use Spouse Age for RRIF,${spouse.useSpouseAgeForRrif ? 'Yes' : 'No'}\n`;
+    }
+
     // 2. 섹션: 시뮬레이션 상세 로그 (Outputs)
     csvContent += "\n\n--- SIMULATION DETAILED LOG (OUTPUTS) ---\n";
     
