@@ -155,21 +155,19 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                     />
                 </div>
                 
-                {/* ★★★ [수정] Unlocking % 입력 필드에 가이드 및 경고 메시지 추가 ★★★ */}
+                {/* Unlocking % 입력 필드 및 가이드 */}
                 <div>
                     <label style={labelStyle} htmlFor="unlockingPercent">Unlocking % (to RRSP)</label>
                     <input
                         type="number"
                         id="unlockingPercent"
-                        style={{...inputStyle, borderColor: showWarning ? '#f59e0b' : '#4b5563'}} // 경고 시 노란색 테두리
+                        style={{...inputStyle, borderColor: showWarning ? '#f59e0b' : '#4b5563'}}
                         value={scenario.settings.lockedIn.unlockingPercent}
                         onChange={(e) => handleSettingChange('lockedIn.unlockingPercent', e.target.value)}
                     />
-                    {/* 규정 안내 (기본 회색) */}
                     <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
                         {currentRule.text}
                     </div>
-                    {/* 경고 메시지 (초과 시 노란색) */}
                     {showWarning && (
                         <div style={{ fontSize: '12px', color: '#f59e0b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <svg style={{width:'12px', height:'12px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
@@ -178,10 +176,11 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                     )}
                 </div>
 
+                {/* ★★★ [수정] CANSIM Rate 툴팁 개선 ★★★ */}
                 <div>
                     <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}} htmlFor="cansimRate">
                         <span>LIF CANSIM Rate (%)</span>
-                        <Tooltip text="The long-term government bond rate (Reference Rate) used to calculate the maximum annual LIF withdrawal limit.">
+                        <Tooltip text="A government benchmark rate used to calculate the maximum you can withdraw from a LIF. Higher rates = higher max withdrawal limits. Lower rates = lower limits. (Note: Minimum withdrawal is determined only by age.)">
                             <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                             </svg>
