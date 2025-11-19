@@ -303,7 +303,7 @@ var optimizeJointTax = function(params) {
     var taxParameters = params.taxParameters;
     var province = params.province;
     
-    // 1. 싱글이거나 배우자 소득 정보가 없는 경우 (기존 방식대로 계산)
+    // 1. 싱글이거나 배우자 소득 정보가 없는 경우
     if (!spouseIncome) {
         var incomeBreakdown = {
             otherIncome: (clientIncome.base || 0) + (clientIncome.usDividend || 0),
@@ -324,8 +324,7 @@ var optimizeJointTax = function(params) {
     }
 
     // 2. 부부 최적화 케이스 (Pension Splitting Loop)
-    // Python 로직과 동일하게 0% ~ 50% (5% 단위) 탐색
-    var eligiblePension = clientIncome.rrif || 0; // 본인의 Pension Income (Split 대상)
+    var eligiblePension = clientIncome.rrif || 0; 
     var minTotalTax = Infinity;
     var bestResult = null;
     
@@ -336,7 +335,7 @@ var optimizeJointTax = function(params) {
         var ratio = splitRatios[i];
         var splitAmount = eligiblePension * ratio;
 
-        // [본인] 소득 재구성 (스플릿 금액 차감)
+        // [본인] 소득 재구성
         var clientBreakdown = {
             otherIncome: (clientIncome.base || 0) + (clientIncome.usDividend || 0),
             rrspWithdrawal: eligiblePension - splitAmount,
@@ -354,7 +353,7 @@ var optimizeJointTax = function(params) {
             province: province
         });
 
-        // [배우자] 소득 재구성 (스플릿 금액 가산)
+        // [배우자] 소득 재구성
         var spouseBreakdown = {
             otherIncome: (spouseIncome.base || 0) + (spouseIncome.usDividend || 0),
             rrspWithdrawal: (spouseIncome.rrif || 0) + splitAmount, // 받은 연금은 RRIF처럼 과세
@@ -363,13 +362,11 @@ var optimizeJointTax = function(params) {
         };
         var spouseNetIncome = (spouseBreakdown.otherIncome) + spouseBreakdown.rrspWithdrawal + spouseBreakdown.capitalGains + spouseBreakdown.canadianDividend * 1.38 + (spouseIncome.oas || 0);
         
-        // 배우자 나이 추정 (Python과 동일하게 본인 나이로 가정하거나 별도 파라미터 필요하지만, 여기선 본인 나이 사용)
-        // 정확도를 위해선 배우자 나이도 받아야 하지만, 현재 구조상 age 사용
         var spouseTaxRes = calculateTaxWithClawback({
             incomeBreakdown: spouseBreakdown,
             netIncomeForClawback: spouseNetIncome,
             oasIncome: spouseIncome.oas || 0,
-            age: age, 
+            age: age, // 배우자 나이도 본인 나이로 가정 (간소화)
             taxParameters: taxParameters,
             province: province
         });
@@ -379,7 +376,7 @@ var optimizeJointTax = function(params) {
         if (currentTotalTax < minTotalTax) {
             minTotalTax = currentTotalTax;
             bestResult = {
-                totalTax: clientTaxRes.totalTax, // 본인 세금 (최적화된) 반환
+                totalTax: clientTaxRes.totalTax, // 본인 세금 반환 (주의: 부부합산액 아님, 시뮬레이션 주체 기준)
                 spouseTax: spouseTaxRes.totalTax,
                 oasClawback: clientTaxRes.oasClawback,
                 marginalRate: clientTaxRes.marginalRate,
