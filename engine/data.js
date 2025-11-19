@@ -339,7 +339,7 @@ var createApiPayload = (scenario) => {
             conversion_age: scenario.settings.lockedIn ? scenario.settings.lockedIn.conversionAge : 71,
             unlocking_percent: (scenario.settings.lockedIn ? scenario.settings.lockedIn.unlockingPercent : 50.0) / 100.0,
             cansim_rate: (scenario.settings.lockedIn ? scenario.settings.lockedIn.cansimRate : 3.5) / 100.0,
-            jurisdiction: scenario.settings.province # province 필드를 jurisdiction으로 재사용
+            jurisdiction: scenario.settings.province // province 필드를 jurisdiction으로 재사용
         },
 
         // [수입/지출 $0 버그 수정] start_year와 end_year를 '나이'로 변환하여 전송
