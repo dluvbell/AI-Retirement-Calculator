@@ -21,7 +21,6 @@ const deepCopy = (obj, visited = new WeakMap()) => {
 const SCENARIO_COLORS = ['#38bdf8', '#fbbf24', '#a78bfa', '#4ade80', '#f87171'];
 
 const App = () => {
-    // ★★★ [버그 수정] createNewScenario가 전역(window) 스코프에 있으므로, window.createNewScenario로 호출합니다. ★★★
     const [scenarios, setScenarios] = React.useState([window.createNewScenario("My Default Scenario")]);
     const [activeScenarioId, setActiveScenarioId] = React.useState(scenarios[0].id);
     const activeScenario = scenarios.find(s => s.id === activeScenarioId);
@@ -33,11 +32,8 @@ const App = () => {
     const [error, setError] = React.useState(null);
     const [apiStatus, setApiStatus] = React.useState({ ai: null, baseline: null });
     
-    // ★★★ [수정] devMode 상태 제거됨 ★★★
-    
     const [simulationWorker, setSimulationWorker] = React.useState(null);
     
-    // Web Worker 초기화
     React.useEffect(() => {
         const worker = new Worker('./engine/simulation.worker.js');
         worker.onmessage = (e) => {
@@ -64,8 +60,9 @@ const App = () => {
     
     // --- 시나리오 관리 핸들러 ---
     const handleAddScenario = () => {
-        if (scenarios.length >= 3) {
-            alert("You can add up to 3 scenarios.");
+        // ★★★ [수정] 최대 시나리오 개수 5개로 증가 ★★★
+        if (scenarios.length >= 5) {
+            alert("You can add up to 5 scenarios.");
             return;
         }
         const newScenario = window.createNewScenario(`Scenario ${scenarios.length + 1}`);
@@ -74,8 +71,9 @@ const App = () => {
     };
 
     const handleCopyScenario = (idToCopy) => {
-        if (scenarios.length >= 3) {
-            alert("You can add up to 3 scenarios.");
+        // ★★★ [수정] 최대 시나리오 개수 5개로 증가 ★★★
+        if (scenarios.length >= 5) {
+            alert("You can add up to 5 scenarios.");
             return;
         }
         const scenarioToCopy = scenarios.find(s => s.id === idToCopy);
@@ -129,7 +127,6 @@ const App = () => {
         }));
     };
     
-    // --- 시뮬레이션 실행 ---
     const EMPTY_RESULT = { finalBalance: 0, totalTax: 0, yearlyData: [], detailedLog: [] };
 
     const handleStandardSimResult = (scenarioId, result) => {
@@ -175,7 +172,6 @@ const App = () => {
 
         const payload = createApiPayload(scenario);
         
-        // ★★★ [버그 수정] 포트를 8080에서 5001로 변경 ★★★
         fetch('http://127.0.0.1:5001/simulate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -223,13 +219,8 @@ const App = () => {
     <div style={{minHeight: '100vh', backgroundColor: '#111827', color: 'white'}}>
         <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <h2 style={{fontSize: '24px', fontWeight: '600', marginBottom: '20px'}}>Retirement Planner</h2>
-            <BasicSettings scenario={activeScenario} onUpdate={handleSettingsChange} />
-            <AssetsStrategy scenario={activeScenario} onUpdate={handleSettingsChange} />
-            <AssetProfiles scenario={activeScenario} onUpdate={handleSettingsChange} useSimpleMode={activeScenario.settings.portfolio.useSimpleMode} />
-            <IncomesExpenses scenario={activeScenario} onUpdate={handleSettingsChange} />
-        </div>
-        
-        <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
+            
+            {/* ★★★ [수정] ScenarioManager를 최상단으로 이동 및 handleAddScenario 전달 ★★★ */}
             <ScenarioManager 
                 scenarios={scenarios}
                 activeScenarioId={activeScenarioId}
@@ -237,9 +228,17 @@ const App = () => {
                 onRenameScenario={handleRenameScenario}
                 onCopyScenario={handleCopyScenario}
                 onDeleteScenario={handleDeleteScenario}
+                onAddScenario={handleAddScenario} // 전달
                 colors={SCENARIO_COLORS}
             />
             
+            <BasicSettings scenario={activeScenario} onUpdate={handleSettingsChange} />
+            <AssetsStrategy scenario={activeScenario} onUpdate={handleSettingsChange} />
+            <AssetProfiles scenario={activeScenario} onUpdate={handleSettingsChange} useSimpleMode={activeScenario.settings.portfolio.useSimpleMode} />
+            <IncomesExpenses scenario={activeScenario} onUpdate={handleSettingsChange} />
+        </div>
+        
+        <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <div style={{backgroundColor: '#1f2937', padding: '20px', borderRadius: '8px', marginTop: '20px'}}>
             <div style={{display: 'flex', gap: '16px', alignItems: 'flex-end'}}>
                 <button 
@@ -286,42 +285,27 @@ const App = () => {
                 )}
                 {error && <div style={{color: '#f87171', fontSize: '14px', flex: 1}}>{error}</div>}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
-                <div style={{ display: 'flex', gap: '16px' }}>
-                    <button 
-                        onClick={handleAddScenario}
-                        style={{
-                            padding: '6px 12px', fontSize: '14px',
-                            backgroundColor: 'transparent', color: '#a5f3fc',
-                            border: '1px solid #a5f3fc', borderRadius: '6px',
-                            cursor: (isLoading || scenarios.length >= 3) ? 'not-allowed' : 'pointer'
-                        }}
-                        disabled={isLoading || scenarios.length >= 3}
-                    >
-                        + Add Scenario
-                    </button>
-                    <div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => alert('Export functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Export</button>
-                            <button onClick={() => alert('Import functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Import</button>
-                            <div style={{position: 'relative'}}>
-                                <select 
-                                    onChange={(e) => alert(e.target.value)} 
-                                    style={{
-                                        padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', 
-                                        color: 'white', border: 'none', borderRadius: '6px', 
-                                        cursor: 'pointer', appearance: 'none', paddingRight: '30px'
-                                    }}
-                                >
-                                    <option value="">Load Template</option>
-                                    <option value="template1">Aggressive Growth</option>
-                                    <option value="template2">Conservative (Capital Preservation)</option>
-                                </select>
-                            </div>
-                        </div>
+            
+            {/* ★★★ [수정] 하단 버튼 그룹 정리 (Add Scenario 삭제, Export/Import 유지) ★★★ */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '20px' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => alert('Export functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Export</button>
+                    <button onClick={() => alert('Import functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Import</button>
+                    <div style={{position: 'relative'}}>
+                        <select 
+                            onChange={(e) => alert(e.target.value)} 
+                            style={{
+                                padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', 
+                                color: 'white', border: 'none', borderRadius: '6px', 
+                                cursor: 'pointer', appearance: 'none', paddingRight: '30px'
+                            }}
+                        >
+                            <option value="">Load Template</option>
+                            <option value="template1">Aggressive Growth</option>
+                            <option value="template2">Conservative (Capital Preservation)</option>
+                        </select>
                     </div>
                 </div>
-                {/* ★★★ [수정] Show Developer Details 토글 제거됨 ★★★ */}
             </div>
             </div>
 
