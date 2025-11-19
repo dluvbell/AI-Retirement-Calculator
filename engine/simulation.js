@@ -1,402 +1,563 @@
-// --- engine/data.js ---
+// --- engine/simulation.js ---
 
-/**
- * 이 파일은 앱의 '기본 상태(Default State)'와 '데이터 변환(Data Transformation)'을 담당합니다.
- * 사용자가 '새 시나리오'를 추가할 때 사용되는 템플릿입니다.
- */
-
-// [AI 2.0] 6개 자산군 정의 (JS 프론트엔드용 키)
-const ASSET_KEYS = ['growth', 'balanced', 'dividend_can', 'dividend_us', 'bond', 'gic'];
-
-// 1. 기본 자산 프로파일 (6개 자산군)
-const DEFAULT_ASSET_PROFILES = {
-    growth: { name: 'Growth Stocks', growth: 8.0, dividend: 0.5, volatility: 18.0, dividend_growth: 5.0 },
-    balanced: { name: 'Balanced Stocks', growth: 5.0, dividend: 1.5, volatility: 12.0, dividend_growth: 4.0 },
-    dividend_can: { name: 'CAN Dividend', growth: 3.0, dividend: 4.0, volatility: 10.0, dividend_growth: 3.0 },
-    dividend_us: { name: 'US Dividend', growth: 4.0, dividend: 3.0, volatility: 11.0, dividend_growth: 3.0 },
-    bond: { name: 'Bonds', growth: 1.0, dividend: 2.5, volatility: 5.0, dividend_growth: 0.0 },
-    gic: { name: 'GIC/Cash', growth: 0.0, dividend: 2.0, volatility: 0.1, dividend_growth: 0.0 }
+// LIRA/LIF 잔액을 포함하여 총 자산을 계산하는 헬퍼 함수
+const getTotalAssets = (balances) => {
+    return balances.rrsp + balances.tfsa + balances.nonReg + balances.lira + balances.lif + balances.checking;
 };
 
-
-// 2. 기본 포트폴리오 (6개 자산군)
-const DEFAULT_PORTFOLIO = {
-    useSimpleMode: true,
-    // 간단 모드 (글라이드패스)
-    startComposition: {
-        growth: 50.0,
-        balanced: 10.0,
-        dividend_can: 0.0,
-        dividend_us: 0.0,
-        bond: 40.0,
-        gic: 0.0
-    },
-    endComposition: {
-        growth: 30.0,
-        balanced: 10.0,
-        dividend_can: 0.0,
-        dividend_us: 0.0,
-        bond: 50.0,
-        gic: 10.0
-    }
-};
-
-// 3. 기본 고급 설정 (6개 자산군)
-const DEFAULT_ADVANCED_SETTINGS = {
-    tfsa: {
-        override: false,
-        holdings: { growth: 60000, balanced: 10000, dividend_can: 0, dividend_us: 0, bond: 30000, gic: 0 },
-        acb: { growth: 0, balanced: 0, dividend_can: 0, dividend_us: 0, bond: 0, gic: 0 }
-    },
-    rrsp: {
-        override: false,
-        holdings: { growth: 120000, balanced: 20000, dividend_can: 0, dividend_us: 0, bond: 60000, gic: 0 },
-        acb: { growth: 0, balanced: 0, dividend_can: 0, dividend_us: 0, bond: 0, gic: 0 }
-    },
-    nonReg: {
-        override: false,
-        holdings: { growth: 200000, balanced: 50000, dividend_can: 0, dividend_us: 0, bond: 50000, gic: 0 },
-        acb: { growth: 150000, balanced: 40000, dividend_can: 0, dividend_us: 0, bond: 45000, gic: 0 }
-    }
-};
-
-// 4. 기본 수입 및 지출
-const DEFAULT_INCOMES = [
-    { id: 1, type: 'CPP', amount: 15000, startYear: 2050, endYear: 2085, growthRate: 2.5 },
-    { id: 2, type: 'OAS', amount: 8000, startYear: 2050, endYear: 2085, growthRate: 2.5 }
-];
-
-const DEFAULT_EXPENSES = [
-    { id: 1, type: 'Living Expenses', amount: 50000, startYear: 2035, endYear: 2085, growthRate: 2.5 }
-];
-
-// 5. 기본 일회성 이벤트
-const DEFAULT_ONE_TIME_EVENTS = [
-    { 
-        id: 1, 
-        year: 2040, 
-        amount: 250000, 
-        type: 'income', 
-        name: 'Inheritance',
-        taxationType: 'nonTaxable', 
-        acb: 0 
-    },
-    { 
-        id: 2, 
-        year: 2045, 
-        amount: 50000, 
-        type: 'expense', 
-        name: 'Car Purchase',
-        taxationType: 'n/a', 
-        acb: 0 
-    }
-];
-
-// 6. 몬테카를로 설정
-const DEFAULT_MONTE_CARLO = {
-    simulationCount: 1000
-};
-
-// LIRA/LIF 설정 기본값
-const DEFAULT_LOCKED_IN_SETTINGS = {
-    conversionAge: 71,       
-    unlockingPercent: 50.0,  
-    cansimRate: 3.5          
-};
-
-// ★★★ [신설] 배우자 설정 기본값 ★★★
-const DEFAULT_SPOUSE_SETTINGS = {
-    hasSpouse: false,
-    birthYear: 1980,
-    cppIncome: 0,
-    pensionIncome: 0,
-    baseIncome: 0,
-    optimizeCppSharing: false,
-    useSpouseAgeForRrif: false
-};
-
-/**
- * 새 시나리오 객체를 생성하는 팩토리 함수
- */
-var createNewScenario = (name) => {
-    const currentYear = new Date().getFullYear();
-    const birthYear = 1980;
-    const startYear = 2035; 
-    const lifeExpectancy = 95; 
-    const endYear = birthYear + lifeExpectancy;
-
-    return {
-        id: Date.now(),
-        name: name,
-        settings: {
-            province: 'ON',
-            birthYear: birthYear,
-            startYear: startYear,
-            endYear: endYear,
-
-            initialBalances: {
-                tfsa: 150000,
-                rrsp: 200000,
-                nonReg: 300000,
-                checking: 20000,
-                minChecking: 10000,
-                maxChecking: 50000,
-                lira: 0,
-                lif: 0
-            },
-            lockedIn: deepCopy(DEFAULT_LOCKED_IN_SETTINGS),
-            // ★★★ [추가] 배우자 설정 초기화 ★★★
-            spouse: deepCopy(DEFAULT_SPOUSE_SETTINGS),
-
-            portfolio: deepCopy(DEFAULT_PORTFOLIO),
-            advancedSettings: deepCopy(DEFAULT_ADVANCED_SETTINGS),
-            rebalanceThreshold: 0, 
-
-            assetProfiles: deepCopy(DEFAULT_ASSET_PROFILES),
-            generalInflation: 2.5,
-            taxInflationRate: 2.5, 
-
-            incomes: deepCopy(DEFAULT_INCOMES),
-            expenses: deepCopy(DEFAULT_EXPENSES),
-            oneTimeEvents: deepCopy(DEFAULT_ONE_TIME_EVENTS),
-            
-            monteCarlo: deepCopy(DEFAULT_MONTE_CARLO),
-        }
-    };
-};
-
-/**
- * 시나리오 객체의 유효성을 검사하는 함수
- */
-var validateScenario = (scenario) => {
-    const errors = [];
-    const settings = scenario.settings;
-
-    // 1. 기본 설정 검사
-    if (settings.startYear <= settings.birthYear) errors.push("Retirement start year must be after birth year.");
-    if (settings.endYear <= settings.startYear) errors.push("Life expectancy (end year) must be after retirement start year.");
-
-    // 2. 자산 검사
-    Object.keys(settings.initialBalances).forEach(key => {
-        if (settings.initialBalances[key] < 0) errors.push(`Initial balance for ${key} cannot be negative.`);
-    });
-    if (settings.initialBalances.maxChecking <= settings.initialBalances.minChecking) {
-        errors.push("Max checking balance must be greater than min checking balance.");
-    }
+const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) => {
+    const { startYear, endYear, birthYear, checkingMaxBalance } = scenario.settings;
     
-    // 3. 포트폴리오 검사 (간단 모드)
-    if (settings.portfolio.useSimpleMode) {
-        const startSum = Object.values(settings.portfolio.startComposition).reduce((s, v) => s + v, 0);
-        const endSum = Object.values(settings.portfolio.endComposition).reduce((s, v) => s + v, 0);
-        if (Math.abs(startSum - 100.0) > 0.01) errors.push("Simple Mode 'Start Composition' percentages must add up to 100%. Current: " + startSum);
-        if (Math.abs(endSum - 100.0) > 0.01) errors.push("Simple Mode 'End Composition' percentages must add up to 100%. Current: " + endSum);
-    }
+    // 인플레이션 기준 연도 설정
+    const baseYearForInflation = 2025; 
+    const simulationScenario = deepCopy(scenario);
 
-    // 4. 자산 프로파일 검사
-    Object.keys(settings.assetProfiles).forEach(key => {
-        const profile = settings.assetProfiles[key];
-        if (profile.volatility < 0) errors.push(`Volatility for ${profile.name} cannot be negative.`);
-        if (profile.dividend_growth < 0) errors.push(`Dividend growth for ${profile.name} cannot be negative.`);
-    });
-
-    // 5. 수입/지출/이벤트 검사
-    [...settings.incomes, ...settings.expenses].forEach(item => {
-        if (item.endYear < item.startYear) errors.push(`For item '${item.type}', end year cannot be before start year.`);
-        if (item.amount < 0) errors.push(`Amount for '${item.type}' cannot be negative.`);
-    });
-    settings.oneTimeEvents.forEach(event => {
-        if (event.amount < 0) errors.push(`Amount for one-time event '${event.name}' cannot be negative.`);
-        if (event.type === 'income' && !event.taxationType) errors.push(`Income event '${event.name}' must have a taxation type.`);
-    });
-
-    // LIRA/LIF 유효성 검사
-    if (settings.lockedIn) {
-        if (settings.lockedIn.unlockingPercent < 0 || settings.lockedIn.unlockingPercent > 100) {
-            errors.push("Unlocking percent must be between 0 and 100.");
+    // 수입/지출 항목을 은퇴 시점 가치로 변환 (2025년 기준)
+    simulationScenario.settings.incomes.forEach(item => {
+        if (item.startYear > baseYearForInflation) {
+            const yearsToCompound = item.startYear - baseYearForInflation;
+            item.amount = item.amount * Math.pow(1 + (item.growthRate || 0) / 100, yearsToCompound);
         }
-        if (settings.lockedIn.cansimRate < 0) {
-            errors.push("CANSIM rate cannot be negative.");
-        }
-    }
-
-    return {
-        isValid: errors.length === 0,
-        errors: errors
-    };
-};
-
-/**
- * 프론트엔드 시나리오 객체를 Python 백엔드 AI가 이해하는 JSON 페이로드로 변환합니다.
- */
-var createApiPayload = (scenario) => {
-    
-    const assetProfileMap = {
-        growth: 'stocks_growth',
-        balanced: 'stocks_balanced',
-        dividend_can: 'stocks_dividend_can',
-        dividend_us: 'stocks_dividend_us',
-        bond: 'bonds',
-        gic: 'gic'
-    };
-    
-    const mappedAssetProfiles = {};
-    for (const key_js in scenario.settings.assetProfiles) {
-        const key_py = assetProfileMap[key_js]; 
-        if (key_py) {
-            const profile = scenario.settings.assetProfiles[key_js];
-            mappedAssetProfiles[key_py] = {
-                name: profile.name,
-                growth: (profile.growth || 0) / 100.0,
-                dividend: (profile.dividend || 0) / 100.0,
-                volatility: (profile.volatility || 0) / 100.0,
-                dividend_growth_rate: (profile.dividend_growth || 0) / 100.0
-            };
-        }
-    }
-
-    const mappedAdvancedAssets = {};
-    const advancedSettings = scenario.settings.advancedSettings;
-    ['tfsa', 'rrsp', 'nonReg'].forEach(acctKey => {
-        mappedAdvancedAssets[acctKey] = {};
-        for (const key_js in advancedSettings[acctKey].holdings) {
-            const key_py = assetProfileMap[key_js]; 
-            if (key_py) {
-                mappedAdvancedAssets[acctKey][key_py] = advancedSettings[acctKey].override 
-                    ? advancedSettings[acctKey].holdings[key_js]
-                    : 0; 
-            }
+    });
+    simulationScenario.settings.expenses.forEach(item => {
+        if (item.startYear > baseYearForInflation) {
+            const yearsToCompound = item.startYear - baseYearForInflation;
+            item.amount = item.amount * Math.pow(1 + (item.growthRate || 0) / 100, yearsToCompound);
         }
     });
     
-    const mapGlidePath = (composition) => {
-        const mapped = {};
-        for (const key_js in composition) {
-            const key_py = assetProfileMap[key_js]; 
-            if (key_py) {
-                mapped[key_py] = (composition[key_js] || 0) / 100.0; 
-            }
-        }
-        return mapped;
+    // 계좌 및 잔액 초기화
+    let accounts = deepCopy(scenario.settings.advancedSettings);
+    let balances = {
+        checking: scenario.settings.initialBalances.checking,
+        rrsp: 0, tfsa: 0, nonReg: 0,
+        lira: scenario.settings.initialBalances.lira || 0,
+        lif: scenario.settings.initialBalances.lif || 0
     };
+    
+    // LIRA/LIF 홀딩스 구조 초기화
+    if (!accounts.lira) accounts.lira = { holdings: {}, acb: {} };
+    if (!accounts.lif) accounts.lif = { holdings: {}, acb: {} };
 
-    const birthYear = scenario.settings.birthYear; 
-
-    const mappedEvents = scenario.settings.oneTimeEvents.map(event => ({
-        year: event.year - birthYear, 
-        amount: event.amount,
-        type: event.type,
-        taxationType: event.taxationType || (event.type === 'income' ? 'nonTaxable' : 'n/a'),
-        acb: event.acb || 0
-    }));
-
-    // ★★★ [신설] 배우자 데이터 추출 및 구조화 ★★★
-    const s = scenario.settings.spouse || {};
-    const spouseData = {
-        hasSpouse: !!s.hasSpouse,
-        birthYear: s.birthYear || birthYear,
-        cppIncome: s.cppIncome || 0,
-        pensionIncome: s.pensionIncome || 0,
-        baseIncome: s.baseIncome || 0,
-        optimizeCppSharing: !!s.optimizeCppSharing,
-        useSpouseAgeForRrif: !!s.useSpouseAgeForRrif
-    };
-
-    const payload = {
-        start_age: scenario.settings.startYear - scenario.settings.birthYear,
-        retirement_age: scenario.settings.startYear - scenario.settings.birthYear,
-        end_age: scenario.settings.endYear - scenario.settings.birthYear,
-        birth_year: scenario.settings.birthYear, 
-
-        pre_retirement_inflation: (scenario.settings.generalInflation || 0) / 100.0, 
-        tax_inflation_rate: (scenario.settings.taxInflationRate || 0) / 100.0, 
-        
-        initial: {
-            chequing: scenario.settings.initialBalances.checking,
-            tfsa: scenario.settings.advancedSettings.tfsa.override ? Object.values(scenario.settings.advancedSettings.tfsa.holdings).reduce((s, v) => s + v, 0) : scenario.settings.initialBalances.tfsa,
-            rrsp: scenario.settings.advancedSettings.rrsp.override ? Object.values(scenario.settings.advancedSettings.rrsp.holdings).reduce((s, v) => s + v, 0) : scenario.settings.initialBalances.rrsp,
-            non_reg: scenario.settings.advancedSettings.nonReg.override ? Object.values(scenario.settings.advancedSettings.nonReg.holdings).reduce((s, v) => s + v, 0) : scenario.settings.initialBalances.nonReg,
-            lira: scenario.settings.initialBalances.lira || 0,
-            lif: scenario.settings.initialBalances.lif || 0
-        },
-        chequing_min: scenario.settings.initialBalances.minChecking,
-        chequing_max: scenario.settings.initialBalances.maxChecking,
-
-        locked_in_settings: {
-            conversion_age: scenario.settings.lockedIn ? scenario.settings.lockedIn.conversionAge : 71,
-            unlocking_percent: (scenario.settings.lockedIn ? scenario.settings.lockedIn.unlockingPercent : 50.0) / 100.0,
-            cansim_rate: (scenario.settings.lockedIn ? scenario.settings.lockedIn.cansimRate : 3.5) / 100.0,
-            jurisdiction: scenario.settings.province 
-        },
-        
-        // ★★★ [추가] 배우자 정보 전송 ★★★
-        spouse_data: spouseData,
-
-        income_items: scenario.settings.incomes.map(item => ({
-            id: item.id,
-            type: item.type,
-            amount: item.amount,
-            start_year: item.startYear - birthYear,
-            end_year: item.endYear - birthYear,    
-            growth_rate: (item.growthRate || 0) / 100.0
-        })),
-        expense_items: scenario.settings.expenses.map(item => ({
-            id: item.id,
-            type: item.type,
-            amount: item.amount,
-            start_year: item.startYear - birthYear,
-            end_year: item.endYear - birthYear,    
-            growth_rate: (item.growthRate || 0) / 100.0
-        })),
-        one_time_events: mappedEvents,
-
-        assets: mappedAssetProfiles,
-        
-        mode: scenario.settings.portfolio.useSimpleMode ? "simple" : "advanced",
-        glide_path_start: mapGlidePath(scenario.settings.portfolio.startComposition),
-        glide_path_end: mapGlidePath(scenario.settings.portfolio.endComposition),
-        advanced_assets: mappedAdvancedAssets, 
-
-        rebalancing: {
-            enabled: scenario.settings.rebalanceThreshold === 0, 
-            frequency_years: 1
-        },
-        runs: scenario.settings.monteCarlo.simulationCount
-    };
-
-    const mapped_non_reg_acb = {};
+    // 포트폴리오 모드에 따른 초기 자산 배분
     if (scenario.settings.portfolio.useSimpleMode) {
-        const total_non_reg_value = scenario.settings.initialBalances.nonReg || 0;
-        const acb_ratio = (scenario.settings.initialBalances.nonRegAcbRatio || 0) / 100.0;
-        const total_acb = total_non_reg_value * acb_ratio;
-        const start_composition = scenario.settings.portfolio.startComposition;
-        const total_comp_ratio = Object.values(start_composition).reduce((s, v) => s + v, 0);
+        balances.rrsp = scenario.settings.initialBalances.rrsp;
+        balances.tfsa = scenario.settings.initialBalances.tfsa;
+        balances.nonReg = scenario.settings.initialBalances.nonReg;
+        
+        const simpleComposition = scenario.settings.portfolio.startComposition;
+        ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif'].forEach(acctKey => { 
+            const totalValue = balances[acctKey]; 
+            const newHoldings = {};
+            for (const assetKey in simpleComposition) {
+                newHoldings[assetKey] = totalValue * (simpleComposition[assetKey] / 100);
+            }
+            accounts[acctKey].holdings = newHoldings;
+            
+            if (acctKey === 'nonReg') {
+                const totalAcb = totalValue * (scenario.settings.initialBalances.nonRegAcbRatio / 100);
+                const newAcb = {};
+                for (const assetKey in simpleComposition) {
+                    newAcb[assetKey] = totalAcb * (simpleComposition[assetKey] / 100);
+                }
+                accounts.nonReg.acb = newAcb;
+            } else if (acctKey === 'lira' || acctKey === 'lif') {
+                 accounts[acctKey].acb = {};
+            }
+        });
+    } else {
+        balances.rrsp = getAccountTotal(accounts.rrsp.holdings);
+        balances.tfsa = getAccountTotal(accounts.tfsa.holdings);
+        balances.nonReg = getAccountTotal(accounts.nonReg.holdings);
+        
+        const totalLira = balances.lira;
+        const totalLif = balances.lif;
 
-        for (const key_js in start_composition) {
-            const key_py = assetProfileMap[key_js];
-            if (key_py) {
-                if (total_comp_ratio > 0) {
-                    const asset_ratio = (start_composition[key_js] || 0) / total_comp_ratio;
-                    mapped_non_reg_acb[key_py] = total_acb * asset_ratio;
-                } else {
-                    mapped_non_reg_acb[key_py] = 0;
+        // LIRA/LIF가 고급 모드 설정에 없으면 RRSP 구성을 따름
+        const assetKeys = Object.keys(accounts.rrsp.holdings); 
+        if (assetKeys.length > 0) {
+            const tempComp = getAccountComposition(accounts.rrsp.holdings); 
+            accounts.lira.holdings = {};
+            accounts.lif.holdings = {};
+            for (const assetKey in tempComp) {
+                const ratio = tempComp[assetKey] / 100;
+                accounts.lira.holdings[assetKey] = totalLira * ratio;
+                accounts.lif.holdings[assetKey] = totalLif * ratio;
+            }
+        }
+    }
+
+    // 배우자 설정 로드
+    const spouseSettings = scenario.settings.spouse || { hasSpouse: false };
+    const hasSpouse = spouseSettings.hasSpouse;
+    const spouseBirthYear = spouseSettings.birthYear || birthYear;
+    const spouseCppInitial = spouseSettings.cppIncome || 0;
+    const spousePensionInitial = spouseSettings.pensionIncome || 0;
+    const spouseBaseInitial = spouseSettings.baseIncome || 0;
+    const optimizeCppSharing = spouseSettings.optimizeCppSharing || false;
+
+    if (getTotalAssets(balances) <= 0) {
+        return { status: 'NO_INITIAL_FUNDS', yearlyData: [], fundDepletionYear: startYear };
+    }
+
+    const yearlyData = [];
+    let fundDepletionYear = endYear + 1;
+    let taxBillFromLastYear = 0;
+    let tfsaWithdrawalsLastYear = 0;
+    let tfsaContributionRoom = scenario.settings.initialTfsaRoom || 0;
+    const prng = isMonteCarloRun ? createPRNG(scenario.settings.monteCarlo.simulationCount + mcRunIndex) : null;
+
+    // --- 연간 시뮬레이션 루프 시작 ---
+    for (let currentYear = startYear; currentYear <= endYear; currentYear++) {
+        const age = currentYear - birthYear;
+        const yearsPassed = currentYear - baseYearForInflation;
+        const inflationFactor = Math.pow(1 + scenario.settings.generalInflation / 100, yearsPassed);
+
+        const startBalances = deepCopy(balances);
+        const startAccounts = deepCopy(accounts);
+        let decisionLog = {};
+
+        // 1. 기본 수입/지출 계산
+        const annualExpenses = simulationScenario.settings.expenses.reduce((acc, exp) => (currentYear >= exp.startYear && currentYear <= (exp.endYear || endYear) ? acc + exp.amount * getInflationFactor(currentYear, exp.startYear, exp.growthRate) : acc), 0);
+        let annualIncomes = simulationScenario.settings.incomes.reduce((acc, inc) => (currentYear >= inc.startYear && currentYear <= (inc.endYear || endYear) ? acc + inc.amount * getInflationFactor(currentYear, inc.startYear, inc.growthRate) : acc), 0);
+
+        // 2. 배우자 소득 및 CPP Sharing 처리
+        let spouseCpp = 0, spousePension = 0, spouseBase = 0;
+        if (hasSpouse) {
+            spouseCpp = spouseCppInitial * inflationFactor;
+            spousePension = spousePensionInitial * inflationFactor;
+            spouseBase = spouseBaseInitial * inflationFactor;
+
+            if (optimizeCppSharing) {
+                const myCppItem = simulationScenario.settings.incomes.find(i => i.type === 'CPP');
+                let myCpp = 0;
+                if (myCppItem && currentYear >= myCppItem.startYear && currentYear <= (myCppItem.endYear || endYear)) {
+                    myCpp = myCppItem.amount * getInflationFactor(currentYear, myCppItem.startYear, myCppItem.growthRate);
+                }
+                const totalCppPool = myCpp + spouseCpp;
+                const sharedCpp = totalCppPool / 2;
+                // 내 소득 조정 (Sharing 효과)
+                annualIncomes += (sharedCpp - myCpp);
+                spouseCpp = sharedCpp;
+            }
+        }
+
+        const oneTimeEventsThisYear = scenario.settings.oneTimeEvents.filter(e => e.year === currentYear);
+        const oneTimeIncome = oneTimeEventsThisYear.reduce((acc, e) => e.type === 'income' ? acc + e.amount : acc, 0);
+        const oneTimeExpense = oneTimeEventsThisYear.reduce((acc, e) => e.type === 'expense' ? acc + e.amount : acc, 0);
+        const totalRequiredSpending = annualExpenses + oneTimeExpense + taxBillFromLastYear;
+
+        // 3. LIRA -> LIF 전환 및 Unlocking
+        const conversionAge = scenario.settings.lockedIn.conversionAge || 71;
+        const unlockingPercent = (scenario.settings.lockedIn.unlockingPercent || 0) / 100.0;
+        
+        if (age === conversionAge && startBalances.lira > 0) {
+            const totalLira = startBalances.lira;
+            const unlockingAmount = totalLira * unlockingPercent;
+            const lifAmount = totalLira - unlockingAmount;
+            
+            if (unlockingAmount > 0) {
+                 accounts.rrsp.holdings = transferHoldings(accounts.lira.holdings, accounts.rrsp.holdings, unlockingAmount);
+                 balances.rrsp += unlockingAmount;
+            }
+            if (lifAmount > 0) {
+                accounts.lif.holdings = transferHoldings(accounts.lira.holdings, accounts.lif.holdings, lifAmount);
+                balances.lif += lifAmount;
+            }
+            accounts.lira.holdings = {};
+            balances.lira = 0;
+            
+            decisionLog.liraConversion = { unlockedToRRSP: unlockingAmount, convertedToLIF: lifAmount, totalLiraStart: totalLira };
+        }
+        
+        // 4. TFSA 룸 업데이트
+        tfsaContributionRoom += tfsaWithdrawalsLastYear;
+        const annualTfsaLimit = (scenario.settings.annualTfsaContribution || 0) * getInflationFactor(currentYear, startYear, scenario.settings.taxInflationRate / 100.0);
+        tfsaContributionRoom += annualTfsaLimit;
+        
+        // 5. 현금 흐름 및 인출 목표 설정
+        const totalCashInflowBeforeWithdrawal = startBalances.checking + annualIncomes + oneTimeIncome;
+        const cashShortfall = totalRequiredSpending - totalCashInflowBeforeWithdrawal;
+        const baseWithdrawalTarget = Math.max(0, cashShortfall);
+        
+        let rrifCalcAge = age;
+        if (hasSpouse && spouseSettings.useSpouseAgeForRrif) {
+            const spouseAge = currentYear - spouseBirthYear;
+            if (spouseAge < age) rrifCalcAge = spouseAge;
+        }
+
+        const rrifMin = getMinWithdrawal(rrifCalcAge, startBalances.rrsp, 'rrsp');
+        const lifMin = getMinWithdrawal(rrifCalcAge, startBalances.lif, 'lif');
+        const mandatoryWithdrawal = rrifMin + lifMin;
+        const finalWithdrawalTarget = Math.max(baseWithdrawalTarget, mandatoryWithdrawal);
+
+        const totalAssets = startBalances.rrsp + startBalances.tfsa + startBalances.nonReg + startBalances.lira + startBalances.lif;
+        const rrspRatio = totalAssets > 0 ? startBalances.rrsp / totalAssets : 0;
+        const { rrspBonus, tfsaPenalty } = determineStrategicParameters(age, totalAssets, rrspRatio, scenario.settings.monteCarlo.riskProfile / 100.0, scenario.settings.expertMode);
+        
+        const taxParametersForYear = getTaxParametersForYear(currentYear, scenario.settings.taxInflationRate / 100.0, scenario.settings.province);
+        const baseIncomeBreakdown = { otherIncome: annualIncomes };
+        const yearContext = { scenario, age, startYear: currentYear, incomeBreakdown: baseIncomeBreakdown, taxParameters: taxParametersForYear };
+        yearContext.scenario.settings.rrspWithdrawalBonus = rrspBonus;
+        yearContext.scenario.settings.tfsaWithdrawalPenalty = tfsaPenalty;
+        
+        // --- 인출 실행 ---
+        let totalWithdrawalsThisYear = { rrsp: 0, tfsa: 0, nonReg: 0, lira: 0, lif: 0 }; 
+        
+        // (1) 최소 인출 (RRIF/LIF)
+        if (rrifMin > 0) {
+             accounts.rrsp.holdings = withdrawProportionally(accounts.rrsp.holdings, rrifMin);
+             balances.checking += rrifMin;
+             totalWithdrawalsThisYear.rrsp += rrifMin;
+        }
+        if (lifMin > 0) {
+             accounts.lif.holdings = withdrawProportionally(accounts.lif.holdings, lifMin);
+             balances.checking += lifMin;
+             totalWithdrawalsThisYear.lif += lifMin;
+        }
+
+        // (2) 전략적 추가 인출
+        const additionalWithdrawalTarget = finalWithdrawalTarget - mandatoryWithdrawal;
+        let withdrawalCapitalGain = 0;
+
+        if (additionalWithdrawalTarget > 0) {
+            const decision = findOptimalAnnualStrategy(additionalWithdrawalTarget, startBalances, yearContext);
+            decisionLog = decision.log;
+            
+            for (const acctKey in decision.withdrawals) {
+                const amount = Math.min(startBalances[acctKey] || 0, decision.withdrawals[acctKey]);
+                if (amount <= 0) continue;
+                
+                const account = accounts[acctKey];
+                const totalBefore = getAccountTotal(account.holdings);
+                
+                if (totalBefore > 0) {
+                    const ratio = amount / totalBefore;
+                    if (acctKey === 'nonReg') {
+                        const gainResult = calculateProportionalCapitalGains(amount, account.holdings, account.acb);
+                        withdrawalCapitalGain += gainResult.taxableGain;
+                        account.acb = gainResult.newAcb;
+                        for (const assetKey in account.holdings) {
+                            account.holdings[assetKey] -= account.holdings[assetKey] * ratio;
+                        }
+                    } else {
+                         for (const assetKey in account.holdings) {
+                            account.holdings[assetKey] -= account.holdings[assetKey] * ratio;
+                         }
+                    }
+                }
+                balances.checking += amount;
+                totalWithdrawalsThisYear[acctKey] += amount;
+            }
+            tfsaWithdrawalsLastYear = totalWithdrawalsThisYear.tfsa; 
+        } else {
+             tfsaWithdrawalsLastYear = 0;
+        }
+
+        // ★★★ (3) Safety Net (강제 인출) - 세금 계산 전 실행! ★★★
+        // 예상되는 연말 현금 잔고 확인 (세금 납부는 내년이므로 제외하고 계산)
+        const projectedCashBalance = balances.checking + annualIncomes + oneTimeIncome - totalRequiredSpending;
+        
+        if (projectedCashBalance < 0) {
+            let deficit = -projectedCashBalance;
+            
+            // 1순위: Non-Registered
+            if (deficit > 0 && getAccountTotal(accounts.nonReg.holdings) > 0) {
+                const available = getAccountTotal(accounts.nonReg.holdings);
+                const toWithdraw = Math.min(available, deficit);
+                
+                const gainResult = calculateProportionalCapitalGains(toWithdraw, accounts.nonReg.holdings, accounts.nonReg.acb);
+                withdrawalCapitalGain += gainResult.taxableGain;
+                accounts.nonReg.acb = gainResult.newAcb;
+                
+                accounts.nonReg.holdings = withdrawProportionally(accounts.nonReg.holdings, toWithdraw);
+                balances.checking += toWithdraw;
+                totalWithdrawalsThisYear.nonReg += toWithdraw;
+                deficit -= toWithdraw;
+            }
+            
+            // 2순위: TFSA
+            if (deficit > 0 && getAccountTotal(accounts.tfsa.holdings) > 0) {
+                const available = getAccountTotal(accounts.tfsa.holdings);
+                const toWithdraw = Math.min(available, deficit);
+                accounts.tfsa.holdings = withdrawProportionally(accounts.tfsa.holdings, toWithdraw);
+                balances.checking += toWithdraw;
+                totalWithdrawalsThisYear.tfsa += toWithdraw;
+                deficit -= toWithdraw;
+            }
+            
+            // 3순위: RRSP
+            if (deficit > 0 && getAccountTotal(accounts.rrsp.holdings) > 0) {
+                const available = getAccountTotal(accounts.rrsp.holdings);
+                const toWithdraw = Math.min(available, deficit);
+                accounts.rrsp.holdings = withdrawProportionally(accounts.rrsp.holdings, toWithdraw);
+                balances.checking += toWithdraw;
+                totalWithdrawalsThisYear.rrsp += toWithdraw;
+                deficit -= toWithdraw;
+            }
+        }
+
+        // --- 투자 수익, 배당 및 리밸런싱 (세금 계산 전 자산 변동 반영) ---
+        let dividendIncomeThisYear = 0;
+        const crashEvent = scenario.marketCrashes.find(crash => currentYear >= crash.startYear && currentYear < crash.startYear + crash.duration);
+        
+        ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif'].forEach(acctKey => { 
+            const account = accounts[acctKey];
+            if (!account || !account.holdings) return;
+            for (const assetKey in account.holdings) {
+                if (account.holdings[assetKey] > 0) {
+                    const assetProfile = scenario.settings.assetProfiles[assetKey];
+                    if(assetProfile) {
+                        const dividendAmount = account.holdings[assetKey] * (assetProfile.dividend / 100.0);
+                        let capitalChange = 0;
+                        if (crashEvent && crashEvent.impact) {
+                            const totalDropPercent = crashEvent.impact[assetKey] || 0;
+                            const totalDropDecimal = totalDropPercent / 100.0;
+                            const annualLossRate = Math.pow(1 - totalDropDecimal, 1 / crashEvent.duration) - 1;
+                            capitalChange = account.holdings[assetKey] * annualLossRate;
+                        } else {
+                            let appreciationReturn = assetProfile.growth / 100.0;
+                            if (isMonteCarloRun) {
+                                appreciationReturn = generateTDistributionRandom(assetProfile.growth, assetProfile.volatility, 30, prng) / 100.0;
+                            }
+                            capitalChange = account.holdings[assetKey] * appreciationReturn;
+                        }
+                        if (acctKey === 'nonReg') {
+                            dividendIncomeThisYear += dividendAmount;
+                            account.holdings[assetKey] += capitalChange;
+                        } else {
+                            account.holdings[assetKey] += capitalChange + dividendAmount;
+                        }
+                    }
                 }
             }
-        }
-        if (total_comp_ratio === 0 && total_acb > 0) {
-             const first_py_key = assetProfileMap[ASSET_KEYS[0]];
-             if (first_py_key) mapped_non_reg_acb[first_py_key] = total_acb;
-        }
+        });
 
-    } else {
-        const acb_js = scenario.settings.advancedSettings.nonReg.acb;
-        for (const key_js in acb_js) {
-            const key_py = assetProfileMap[key_js]; 
-            if (key_py) {
-                mapped_non_reg_acb[key_py] = acb_js[key_js];
+        let rebalancingCapitalGain = 0;
+        const rebalanceAccount = (acctKey, targetComp) => {
+            const account = accounts[acctKey];
+            if (!account || !account.holdings) return;
+            const totalValue = getAccountTotal(account.holdings);
+            if (totalValue === 0 || !targetComp) return;
+            const threshold = scenario.settings.rebalanceThreshold || 0;
+            if (threshold > 0) {
+                const currentComp = getAccountComposition(account.holdings);
+                let isRebalanceNeeded = false;
+                for (const assetKey in targetComp) {
+                    const targetPercent = targetComp[assetKey] || 0;
+                    const currentPercent = currentComp[assetKey] || 0;
+                    if (Math.abs(targetPercent - currentPercent) > threshold) {
+                        isRebalanceNeeded = true;
+                        break;
+                    }
+                }
+                if (!isRebalanceNeeded) return;
             }
+            const newHoldings = {};
+             for (const assetKey in targetComp) { 
+                newHoldings[assetKey] = totalValue * ((targetComp[assetKey] || 0) / 100);
+            }
+            let totalSellValue = 0;
+            for (const assetKey in account.holdings) {
+                 const currentValue = account.holdings[assetKey] || 0;
+                 const targetValue = newHoldings[assetKey] || 0;
+                 if (currentValue > targetValue) {
+                     totalSellValue += (currentValue - targetValue);
+                 }
+            }
+            if (totalSellValue > 0 && acctKey === 'nonReg') {
+                const gainResult = calculateProportionalCapitalGains(totalSellValue, account.holdings, account.acb);
+                rebalancingCapitalGain += gainResult.taxableGain;
+                account.acb = gainResult.newAcb;
+            }
+            accounts[acctKey].holdings = newHoldings;
+        };
+        
+        if (scenario.settings.portfolio.useSimpleMode) {
+            const targetComposition = calculateCurrentComposition(scenario, currentYear);
+            ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif'].forEach(acctKey => rebalanceAccount(acctKey, targetComposition));
+        } else {
+            ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif'].forEach(acctKey => {
+                if (accounts[acctKey] && accounts[acctKey].endComposition) {
+                     const startComp = getAccountComposition(startAccounts[acctKey].holdings);
+                     const endComp = accounts[acctKey].endComposition;
+                     const tempScenario = { settings: { ...scenario.settings, portfolio: { startComposition: startComp, endComposition: endComp } } };
+                     const targetComposition = calculateCurrentComposition(tempScenario, currentYear);
+                     rebalanceAccount(acctKey, targetComposition);
+                }
+            });
         }
-    }
-    payload.non_reg_acb = mapped_non_reg_acb;
+        
+        // 6. 세금 계산 (강제 인출 및 배당 수익 등을 모두 반영한 후)
+        let taxableOtherIncome = annualIncomes;
+        let taxableCapitalGains = withdrawalCapitalGain + rebalancingCapitalGain;
 
-    return payload;
+        oneTimeEventsThisYear.forEach(e => {
+            if (e.type === 'income') {
+                if (e.taxationType === 'regularIncome') taxableOtherIncome += e.amount;
+                else if (e.taxationType === 'capitalGain' && e.amount && e.acb) taxableCapitalGains += Math.max(0, e.amount - e.acb) * 0.5;
+            }
+        });
+
+        const oasIncomeData = scenario.settings.incomes.find(i => i.type === 'OAS');
+        const oasIncome = oasIncomeData ? oasIncomeData.amount * getInflationFactor(currentYear, oasIncomeData.startYear, oasIncomeData.growthRate / 100.0) : 0;
+        
+        const totalTaxableWithdrawal = totalWithdrawalsThisYear.rrsp + totalWithdrawalsThisYear.lif;
+        
+        const clientIncomePkg = {
+            base: taxableOtherIncome, // CPP, Employment 등
+            rrif: totalTaxableWithdrawal, // RRSP/LIF 인출
+            capitalGains: taxableCapitalGains,
+            canDividend: dividendIncomeThisYear,
+            usDividend: 0,
+            oas: oasIncome
+        };
+
+        let spouseIncomePkg = null;
+        if (hasSpouse) {
+            spouseIncomePkg = {
+                base: spouseBase + spouseCpp,
+                rrif: spousePension,
+                capitalGains: 0,
+                canDividend: 0,
+                usDividend: 0,
+                oas: 0 
+            };
+        }
+
+        // 부부 합산 최적화 실행
+        const taxResult = optimizeJointTax({
+            clientIncome: clientIncomePkg,
+            spouseIncome: spouseIncomePkg,
+            age: age,
+            taxParameters: taxParametersForYear,
+            province: scenario.settings.province
+        });
+        
+        // 결정된 세금 (내년 지출로 예약)
+        taxBillFromLastYear = taxResult.totalTax;
+
+        // 7. 연말 잔액 최종 정리
+        balances.checking += annualIncomes + oneTimeIncome;
+        balances.checking -= totalRequiredSpending;
+        balances.checking += dividendIncomeThisYear; // 배당은 현금으로 수취 가정
+        
+        // 잉여 현금 재투자
+        const temporaryMaxBalance = checkingMaxBalance + taxBillFromLastYear;
+        if (balances.checking > temporaryMaxBalance) {
+            let surplus = balances.checking - temporaryMaxBalance;
+            const toTfsa = Math.min(surplus, tfsaContributionRoom);
+            const targetComp = calculateCurrentComposition(scenario, currentYear);
+            
+            if (toTfsa > 0) {
+                const comp = getAccountComposition(accounts.tfsa.holdings);
+                const compToUse = Object.keys(comp).length > 0 ? comp : targetComp;
+                for (const assetKey in compToUse) { 
+                    accounts.tfsa.holdings[assetKey] = (accounts.tfsa.holdings[assetKey] || 0) + toTfsa * (compToUse[assetKey] / 100); 
+                }
+                surplus -= toTfsa;
+                tfsaContributionRoom -= toTfsa;
+            }
+            if (surplus > 0) {
+                const comp = getAccountComposition(accounts.nonReg.holdings);
+                const compToUse = Object.keys(comp).length > 0 ? comp : targetComp;
+                for (const assetKey in compToUse) {
+                    const amountToAdd = surplus * (compToUse[assetKey] / 100);
+                    accounts.nonReg.holdings[assetKey] = (accounts.nonReg.holdings[assetKey] || 0) + amountToAdd;
+                    accounts.nonReg.acb[assetKey] = (accounts.nonReg.acb[assetKey] || 0) + amountToAdd;
+                }
+            }
+            balances.checking = temporaryMaxBalance;
+        }
+
+        balances.rrsp = getAccountTotal(accounts.rrsp.holdings);
+        balances.tfsa = getAccountTotal(accounts.tfsa.holdings);
+        balances.nonReg = getAccountTotal(accounts.nonReg.holdings);
+        balances.lira = getAccountTotal(accounts.lira.holdings);
+        balances.lif = getAccountTotal(accounts.lif.holdings);
+        
+        // 8. 결과 기록 (CSV 출력을 위한 변수명 매핑)
+        yearlyData.push({
+            year: currentYear,
+            age: age,
+            start_nw: getTotalAssets(startBalances),
+            end_nw: getTotalAssets(balances),
+            startBalances: startBalances,
+            endBalances: deepCopy(balances),
+            startAccounts: startAccounts,
+            endAccounts: deepCopy(accounts),
+            
+            taxDetails: taxResult.details,
+            taxableIncomeForYear: taxResult.details.taxableIncome,
+            taxableRegularIncome: taxableOtherIncome,
+            
+            total_income: annualIncomes + oneTimeIncome,
+            total_expense: annualExpenses + oneTimeExpense,
+            
+            tax_paid: taxBillFromLastYear, // 올바른 세금 기록
+            
+            rrifMin: rrifMin,
+            lifMin: lifMin, 
+            oneTimeIncome: oneTimeIncome, 
+            oneTimeExpense: oneTimeExpense, 
+            
+            withdrawals: totalWithdrawalsThisYear, // 올바른 인출액 기록
+            
+            withdrawalCapitalGain: withdrawalCapitalGain,
+            rebalancingCapitalGain: rebalancingCapitalGain,
+            dividendIncome: dividendIncomeThisYear,
+            oas_clawback: taxResult.oasClawback,
+            marginalRate: taxResult.marginalRate,
+            tfsaContributionRoomStart: tfsaContributionRoom - annualTfsaLimit,
+            tfsaContributionRoomEnd: tfsaContributionRoom,
+            decisionLog: decisionLog,
+            
+            balances: {
+                lira: balances.lira,
+                lif: balances.lif,
+                rrsp: balances.rrsp,
+                tfsa: balances.tfsa,
+                non_reg: balances.nonReg,
+                chequing: balances.checking
+            }
+        });
+
+        // 자산 고갈 체크
+        if (balances.checking < 0 && getTotalAssets(balances) <= 0) {
+             fundDepletionYear = currentYear;
+             break;
+        }
+    } 
+
+   return { status: 'SUCCESS', yearlyData, fundDepletionYear };
+};
+
+// 헬퍼: 자산 이동
+const transferHoldings = (sourceHoldings, destinationHoldings, totalAmountToTransfer) => {
+    if (totalAmountToTransfer <= 0) return destinationHoldings;
+    const sourceTotal = getAccountTotal(sourceHoldings);
+    if (sourceTotal <= 0) return destinationHoldings;
+    const ratio = totalAmountToTransfer / sourceTotal;
+    const newDestinationHoldings = deepCopy(destinationHoldings);
+    const assetsToRemove = [];
+    for (const assetKey in sourceHoldings) {
+        const amountToTransfer = sourceHoldings[assetKey] * ratio;
+        newDestinationHoldings[assetKey] = (newDestinationHoldings[assetKey] || 0) + amountToTransfer;
+        sourceHoldings[assetKey] -= amountToTransfer; 
+        if (sourceHoldings[assetKey] < 1) assetsToRemove.push(assetKey); 
+    }
+    assetsToRemove.forEach(assetKey => delete sourceHoldings[assetKey]);
+    return newDestinationHoldings;
+};
+
+// 헬퍼: 비율 인출
+const withdrawProportionally = (holdings, amountToWithdraw) => {
+     const totalBefore = getAccountTotal(holdings);
+     if (totalBefore <= 0 || amountToWithdraw <= 0) return holdings;
+     const withdrawalRatio = amountToWithdraw / totalBefore;
+     const newHoldings = deepCopy(holdings);
+     for (const assetKey in newHoldings) {
+          newHoldings[assetKey] -= newHoldings[assetKey] * withdrawalRatio;
+     }
+     return newHoldings;
 };
