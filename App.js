@@ -30,33 +30,10 @@ const App = () => {
     const [isLoading, setIsLoading] = React.useState(false);
     const [progress, setProgress] = React.useState({ message: '', percentage: 0 });
     const [error, setError] = React.useState(null);
-    const [apiStatus, setApiStatus] = React.useState({ ai: null, baseline: null });
+    // [수정] apiStatus에서 baseline 제거
+    const [apiStatus, setApiStatus] = React.useState({ ai: null });
     
-    const [simulationWorker, setSimulationWorker] = React.useState(null);
-    
-    React.useEffect(() => {
-        const worker = new Worker('./engine/simulation.worker.js');
-        worker.onmessage = (e) => {
-            if (e.data.error) {
-                setError(`Worker Error: ${e.data.error}`);
-                setIsLoading(false);
-            } else if (e.data.type === 'progress') {
-                setProgress({ 
-                    message: `Running Baseline Monte Carlo... (${e.data.completedRuns}/${e.data.totalRuns})`,
-                    percentage: (e.data.completedRuns / e.data.totalRuns) * 100
-                });
-            } else {
-                handleStandardSimResult(activeScenario.id, e.data);
-                setApiStatus(prev => ({ ...prev, baseline: 'complete' }));
-                setIsLoading(false);
-            }
-        };
-        setSimulationWorker(worker);
-        
-        return () => {
-            worker.terminate();
-        };
-    }, [activeScenario.id]); 
+    // [수정] simulationWorker 관련 코드 제거
     
     const handleAddScenario = () => {
         if (scenarios.length >= 5) {
@@ -123,48 +100,13 @@ const App = () => {
         }));
     };
     
-    const EMPTY_RESULT = { finalBalance: 0, totalTax: 0, yearlyData: [], detailedLog: [] };
-
-    const handleStandardSimResult = (scenarioId, result) => {
-        setStandardResults(prev => ({
-            ...prev,
-            [scenarioId]: {
-                finalBalance: result.finalBalance,
-                totalTax: result.totalTax,
-                yearlyData: result.yearlyData,
-                detailedLog: result.detailedLog || []
-            }
-        }));
-    };
-
-    const runStandardSimulation = (scenario) => {
-        if (!simulationWorker) {
-            setError("Simulation worker is not ready.");
-            return;
-        }
-        setIsLoading(true);
-        setApiStatus(prev => ({ ...prev, baseline: 'running' }));
-        setProgress({ message: 'Starting Baseline Monte Carlo...', percentage: 0 });
-        
-        try {
-            simulationWorker.postMessage({
-                scenario: scenario, 
-                runs: 100 
-            });
-        } catch (err) {
-            console.error("Standard sim error:", err);
-            setError(`Standard Sim Error: ${err.message}`);
-            handleStandardSimResult(scenario.id, EMPTY_RESULT);
-            setIsLoading(false);
-            setApiStatus(prev => ({ ...prev, baseline: 'error' }));
-        }
-    };
+    // [수정] runStandardSimulation 함수 제거됨
     
     const runAiSimulation = (scenario) => {
         setIsLoading(true);
         setError(null);
         setProgress({ message: 'Running AI Simulation...', percentage: 0 });
-        setApiStatus({ baseline: null, ai: 'running' });
+        setApiStatus({ ai: 'running' });
 
         const payload = createApiPayload(scenario);
         
@@ -196,13 +138,13 @@ const App = () => {
                     detailedLog: data.detailed_log.baseline_log || []
                 }
             }));
-            setApiStatus({ baseline: 'complete', ai: 'complete' });
+            setApiStatus({ ai: 'complete' });
             setIsLoading(false);
         })
         .catch(err => {
             console.error("AI sim error:", err);
             setError(`AI Sim Error: ${err.message}`);
-            setApiStatus({ baseline: 'error', ai: 'error' });
+            setApiStatus({ ai: 'error' });
             setIsLoading(false);
         });
     };
@@ -235,7 +177,6 @@ const App = () => {
         
         <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
             <div style={{backgroundColor: '#1f2937', padding: '20px', borderRadius: '8px', marginTop: '20px'}}>
-                {/* ★★★ [수정] 버튼 레이아웃 통합 (실행 버튼 + 유틸리티 버튼) ★★★ */}
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                     
                     {/* 왼쪽 그룹: 실행 버튼 & 상태 */}
@@ -250,22 +191,9 @@ const App = () => {
                             }}
                             disabled={isLoading}
                         >
-                            {apiStatus.ai === 'running' ? 'Running AI...' : (apiStatus.ai === 'complete' ? 'Run AI (Done)' : 'Run AI Simulation')}
+                            {apiStatus.ai === 'running' ? 'Running AI...' : (apiStatus.ai === 'complete' ? 'Run Simulation' : 'Run Simulation')}
                         </button>
                         
-                        <button 
-                            onClick={() => runStandardSimulation(activeScenario)}
-                            style={{
-                                padding: '10px 20px', fontSize: '16px', fontWeight: '600',
-                                backgroundColor: apiStatus.baseline === 'running' ? '#555' : (apiStatus.baseline === 'complete' ? '#16a34a' : '#4b5563'),
-                                color: 'white', border: 'none', borderRadius: '6px', cursor: isLoading ? 'not-allowed' : 'pointer',
-                                whiteSpace: 'nowrap'
-                            }}
-                            disabled={isLoading}
-                        >
-                            {apiStatus.baseline === 'running' ? 'Running...' : (apiStatus.baseline === 'complete' ? 'Baseline (Done)' : 'Run Baseline')}
-                        </button>
-
                         {/* 로딩 바 (남는 공간 차지) */}
                         {isLoading ? (
                             <div style={{flex: 1, maxWidth: '300px', marginLeft: '10px', color: '#d1d5db'}}>
@@ -290,7 +218,7 @@ const App = () => {
                                     padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', 
                                     color: 'white', border: 'none', borderRadius: '6px', 
                                     cursor: 'pointer', appearance: 'none', paddingRight: '30px',
-                                    width: 'auto' // [수정] 너비 자동 조절
+                                    width: 'auto'
                                 }}
                             >
                                 <option value="">Load Template</option>
