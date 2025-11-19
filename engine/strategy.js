@@ -12,7 +12,7 @@ var lookAheadAndAdvise = function(currentAge, currentYear, rrspBalance, currentB
         var futureYear = currentYear + i;
         var futureAge = currentAge + i;
 
-        var futureAnnualIncomes = scenario.incomes.reduce(function(acc, inc) {
+        var futureAnnualIncomes = scenario.settings.incomes.reduce(function(acc, inc) {
             if (futureYear >= inc.startYear && futureYear <= (inc.endYear || scenario.settings.endYear)) {
                 return acc + inc.amount * getInflationFactor(futureYear, inc.startYear, inc.growthRate);
             }
@@ -72,22 +72,22 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
     var taxParameters = yearContext.taxParameters;
     var initialIncomeBreakdown = yearContext.incomeBreakdown;
 
-    // ★★★ [신설] Solver 내부에서 배우자 소득 추산 (Simulation.js와 로직 동기화) ★★★
+    // ★★★ [신설] 배우자 정보 및 소득 추산 (Simulation.js와 로직 동기화) ★★★
     var spouseSettings = scenario.settings.spouse || { hasSpouse: false };
     var hasSpouse = spouseSettings.hasSpouse;
     var spouseIncomePkg = null;
 
     if (hasSpouse) {
-        // 인플레이션 팩터 계산
+        // 인플레이션 적용
         var yearsPassed = startYear - 2025;
         var inflationFactor = Math.pow(1 + (scenario.settings.generalInflation || 0) / 100, yearsPassed);
         
-        // 배우자 기초 소득 계산
+        // 배우자 기초 소득
         var sCpp = (spouseSettings.cppIncome || 0) * inflationFactor;
         var sPension = (spouseSettings.pensionIncome || 0) * inflationFactor;
         var sBase = (spouseSettings.baseIncome || 0) * inflationFactor;
         
-        // CPP Sharing 로직 적용
+        // CPP Sharing 로직 적용 (내 소득 추산은 Solver의 범위를 벗어나므로, 배우자 CPP만 조정)
         if (spouseSettings.optimizeCppSharing) {
              var myCppItem = scenario.settings.incomes.find(function(i) { return i.type === 'CPP'; });
              var myCpp = 0;
@@ -96,8 +96,6 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
              }
              var totalCpp = myCpp + sCpp;
              sCpp = totalCpp / 2;
-             // 주의: 내 CPP는 아래 'currentBaseIncome' 계산 시 자동 반영되지 않으므로 오차가 있을 수 있으나, 
-             // Solver는 '한계세율'과 '비용'만 추정하면 되므로 배우자 소득 총액만 정확하면 됨.
         }
 
         spouseIncomePkg = {
@@ -106,14 +104,14 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
             capitalGains: 0,
             canDividend: 0,
             usDividend: 0,
-            oas: 0 
+            oas: 0 // Solver 단계에서는 배우자 OAS까지 고려하지 않음 (복잡도 감소)
         };
     }
     // ★★★ [신설] 끝 ★★★
 
     var MAX_ITERATIONS = 3;
     var currentWithdrawalPlan = { rrsp: 0, tfsa: 0, nonReg: 0 };
-    var finalTaxResult = { totalTax: 0 }; // [수정] tax -> totalTax 속성명 통일
+    var finalTaxResult = { totalTax: 0 }; 
     var logMessage = "Plan A: Iterative solver started.";
     var result;
 
@@ -126,21 +124,22 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
             capitalGains: Math.max(0, capitalGainRatio) * currentWithdrawalPlan.nonReg
         };
 
-        var oasIncomeData = scenario.incomes.find(function(inc) { return inc.type === 'OAS'; });
+        var oasIncomeData = scenario.settings.incomes.find(function(inc) { return inc.type === 'OAS'; });
         var oasIncome = (oasIncomeData && startYear >= oasIncomeData.startYear)
             ? oasIncomeData.amount * getInflationFactor(startYear, oasIncomeData.startYear, oasIncomeData.growthRate)
             : 0;
 
-        // ★★★ [수정] optimizeJointTax 사용 (부부 합산 최적화 적용) ★★★
+        // ★★★ [수정] optimizeJointTax 호출 (부부 합산 최적화 적용) ★★★
         var clientIncomePkg = {
             base: tempIncomeBreakdown.otherIncome,
             rrif: tempIncomeBreakdown.rrspWithdrawal,
             capitalGains: tempIncomeBreakdown.capitalGains,
-            canDividend: 0, // Solver 단순화를 위해 배당 제외 (오차 미미)
+            canDividend: 0, // Solver에서는 배당 제외 (근사치 계산)
             usDividend: 0,
             oas: oasIncome
         };
 
+        // optimizeJointTax는 tax.js에 정의되어 있어야 함 (Global Scope)
         var tempTaxResult = optimizeJointTax({
             clientIncome: clientIncomePkg,
             spouseIncome: spouseIncomePkg, // 배우자가 없으면 null
@@ -149,7 +148,7 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
             province: scenario.settings.province
         });
 
-        // optimizeJointTax는 bestResult를 반환하며, 여기서 totalTax는 '본인'의 세금임.
+        // 여기서 totalTax는 최적화된 '본인'의 세금
         var estimatedTax = tempTaxResult.totalTax;
         var totalAmountNeeded = amountNeeded + estimatedTax;
 
@@ -159,15 +158,15 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
         var rrspBonus = strategicParams.rrspBonus;
         var tfsaPenalty = strategicParams.tfsaPenalty;
 
-        var currentBaseIncome = scenario.incomes.reduce(function(acc, inc) {
+        var currentBaseIncome = scenario.settings.incomes.reduce(function(acc, inc) {
             return (startYear >= inc.startYear && startYear <= (inc.endYear || scenario.settings.endYear) ? acc + inc.amount : acc);
         }, 0);
         var rrspCostAdjustment = lookAheadAndAdvise(age, startYear, balances.rrsp, currentBaseIncome, scenario);
         
+        // ★★★ [중요] 부부 소득 분할로 MTR이 낮아지면 RRSP 인출 비용(Cost)도 낮아져 더 적극적으로 인출하게 됨
         var estimatedMTR = tempTaxResult.marginalRate;
         var taxableGainPerDollar = Math.max(0, capitalGainRatio) * 0.5;
         
-        // ★★★ [중요] 부부 소득 분할로 인해 한계세율(MTR)이 낮아졌다면, RRSP 인출 비용이 낮아지므로 더 많이 인출하게 됨 ★★★
         var rrspCost = estimatedMTR - rrspBonus + rrspCostAdjustment;
         var nonRegCost = estimatedMTR * taxableGainPerDollar;
         var tfsaCost = tfsaPenalty;
@@ -209,6 +208,7 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
         }
     }
 
+    // 부족분 메우기 (Rounding Error 방지)
     var currentTotal = currentWithdrawalPlan.rrsp + currentWithdrawalPlan.tfsa + currentWithdrawalPlan.nonReg;
     var finalTotalNeeded = amountNeeded + finalTaxResult.totalTax;
     if (currentTotal < finalTotalNeeded) {
