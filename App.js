@@ -30,11 +30,16 @@ const App = () => {
     const [isLoading, setIsLoading] = React.useState(false);
     const [progress, setProgress] = React.useState({ message: '', percentage: 0 });
     const [error, setError] = React.useState(null);
-    // [수정] apiStatus에서 baseline 제거
     const [apiStatus, setApiStatus] = React.useState({ ai: null });
     
-    // [수정] simulationWorker 관련 코드 제거
+    // ★★★ [신설] 개발자 디테일 로그 토글 상태 ★★★
+    const [showDevLog, setShowDevLog] = React.useState(false);
     
+    const [simulationWorker, setSimulationWorker] = React.useState(null);
+    
+    // (Worker useEffect removed as requested in previous step, keeping clean)
+
+    // --- 시나리오 관리 ---
     const handleAddScenario = () => {
         if (scenarios.length >= 5) {
             alert("You can add up to 5 scenarios.");
@@ -99,9 +104,39 @@ const App = () => {
             return s;
         }));
     };
-    
-    // [수정] runStandardSimulation 함수 제거됨
-    
+
+    // --- [신설] Import/Export 핸들러 ---
+    const handleExportJSON = () => {
+        exportToJSON(activeScenario, `scenario_${activeScenario.name.replace(/\s+/g, '_')}.json`);
+    };
+
+    const handleImportJSON = () => {
+        // 파일 입력 엘리먼트 동적 생성
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            importFromJSON(file).then(data => {
+                if (data && data.settings) {
+                    const newScenario = { ...data, id: Date.now(), name: data.name + " (Imported)" };
+                    setScenarios(prev => [...prev, newScenario]);
+                    setActiveScenarioId(newScenario.id);
+                } else {
+                    alert("Invalid scenario file format.");
+                }
+            }).catch(err => alert(err));
+        };
+        input.click();
+    };
+
+    const handleExportCSV = () => {
+        const resultLog = aiResults[activeScenario.id]?.detailedLog;
+        generateVerificationCSV(activeScenario, resultLog, `verification_${activeScenario.name.replace(/\s+/g, '_')}.csv`);
+    };
+
+    // --- 시뮬레이션 실행 ---
     const runAiSimulation = (scenario) => {
         setIsLoading(true);
         setError(null);
@@ -156,7 +191,17 @@ const App = () => {
     return (
     <div style={{minHeight: '100vh', backgroundColor: '#111827', color: 'white'}}>
         <div style={{maxWidth: '1000px', margin: '0 auto', padding: '20px'}}>
-            <h2 style={{fontSize: '24px', fontWeight: '600', marginBottom: '20px'}}>Retirement Planner</h2>
+            {/* Header & Developer Toggle */}
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+                <h2 style={{fontSize: '24px', fontWeight: '600', margin: 0}}>Retirement Planner</h2>
+                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                    <span style={{fontSize: '14px', color: '#9ca3af'}}>Show Developer's Detailed Log</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" checked={showDevLog} onChange={e => setShowDevLog(e.target.checked)} className="sr-only peer" />
+                        <div className="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                </div>
+            </div>
             
             <ScenarioManager 
                 scenarios={scenarios}
@@ -179,7 +224,7 @@ const App = () => {
             <div style={{backgroundColor: '#1f2937', padding: '20px', borderRadius: '8px', marginTop: '20px'}}>
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                     
-                    {/* 왼쪽 그룹: 실행 버튼 & 상태 */}
+                    {/* Left: Run Simulation Button */}
                     <div style={{display: 'flex', gap: '16px', alignItems: 'center', flex: 1}}>
                         <button 
                             onClick={() => runAiSimulation(activeScenario)}
@@ -193,8 +238,8 @@ const App = () => {
                         >
                             {apiStatus.ai === 'running' ? 'Running AI...' : (apiStatus.ai === 'complete' ? 'Run Simulation' : 'Run Simulation')}
                         </button>
-                        
-                        {/* 로딩 바 (남는 공간 차지) */}
+
+                        {/* Loading Bar */}
                         {isLoading ? (
                             <div style={{flex: 1, maxWidth: '300px', marginLeft: '10px', color: '#d1d5db'}}>
                                 <div style={{fontSize: '12px', marginBottom: '2px'}}>{progress.message}</div>
@@ -207,25 +252,17 @@ const App = () => {
                         )}
                     </div>
 
-                    {/* 오른쪽 그룹: 유틸리티 버튼 */}
+                    {/* Right: Export/Import Buttons */}
                     <div style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
-                        <button onClick={() => alert('Export functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Export</button>
-                        <button onClick={() => alert('Import functionality to be added.')} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Import</button>
-                        <div style={{position: 'relative'}}>
-                            <select 
-                                onChange={(e) => alert(e.target.value)} 
-                                style={{
-                                    padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', 
-                                    color: 'white', border: 'none', borderRadius: '6px', 
-                                    cursor: 'pointer', appearance: 'none', paddingRight: '30px',
-                                    width: 'auto'
-                                }}
-                            >
-                                <option value="">Load Template</option>
-                                <option value="template1">Aggressive Growth</option>
-                                <option value="template2">Conservative (Capital Preservation)</option>
-                            </select>
-                        </div>
+                        {/* [수정] 버튼 기능 연결 */}
+                        <button onClick={handleExportJSON} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Export JSON</button>
+                        <button onClick={handleImportJSON} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Import JSON</button>
+                        
+                        {/* [수정] CSV Export 버튼으로 변경 */}
+                        <button onClick={handleExportCSV} style={{ padding: '6px 12px', fontSize: '14px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <svg style={{width:'14px', height:'14px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                            Export to CSV
+                        </button>
                     </div>
                 </div>
             </div>
@@ -237,6 +274,7 @@ const App = () => {
                     scenarios={scenarios}
                     activeScenario={activeScenario}
                     colors={SCENARIO_COLORS}
+                    showDevLog={showDevLog}
                 />
             </div>
         </div>
