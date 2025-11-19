@@ -37,6 +37,89 @@ var deepCopy = (obj, visited = new WeakMap()) => {
     return objCopy;
 };
 
+/**
+ * 인플레이션 팩터를 계산합니다.
+ */
+var getInflationFactor = (currentYear, startYear, rate) => {
+    if (currentYear < startYear) return 1.0;
+    return Math.pow(1 + rate / 100.0, currentYear - startYear);
+};
+
+/**
+ * 계좌의 총 자산 가치를 계산합니다.
+ */
+var getAccountTotal = (holdings) => {
+    if (!holdings) return 0;
+    return Object.values(holdings).reduce((sum, val) => sum + val, 0);
+};
+
+/**
+ * 계좌의 자산 구성을 백분율로 반환합니다.
+ */
+var getAccountComposition = (holdings) => {
+    const total = getAccountTotal(holdings);
+    const composition = {};
+    if (total === 0) return composition;
+    for (const key in holdings) {
+        composition[key] = (holdings[key] / total) * 100;
+    }
+    return composition;
+};
+
+/**
+ * Glide Path에 따라 현재 연도의 목표 포트폴리오 구성을 계산합니다.
+ */
+var calculateCurrentComposition = (scenario, currentYear) => {
+    const { startYear, endYear, portfolio } = scenario.settings;
+    const { startComposition, endComposition } = portfolio;
+    
+    if (currentYear <= startYear) return startComposition;
+    if (currentYear >= endYear) return endComposition;
+    
+    const totalDuration = endYear - startYear;
+    const elapsed = currentYear - startYear;
+    const progress = elapsed / totalDuration;
+    
+    const currentComp = {};
+    for (const key in startComposition) {
+        const startVal = startComposition[key] || 0;
+        const endVal = endComposition[key] || 0;
+        currentComp[key] = startVal + (endVal - startVal) * progress;
+    }
+    return currentComp;
+};
+
+/**
+ * 몬테카를로 시뮬레이션을 위한 PRNG 생성기
+ */
+var createPRNG = (seed) => {
+    return () => {
+        seed |= 0;
+        seed = (seed + 0x6D2B79F5) | 0;
+        var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+};
+
+/**
+ * T-분포 난수 생성 (변동성 적용)
+ */
+var generateTDistributionRandom = (mean, stdDev, df, prng) => {
+    let u, v, w;
+    do {
+        u = 2 * prng() - 1;
+        v = 2 * prng() - 1;
+        w = u * u + v * v;
+    } while (w >= 1 || w === 0);
+    const multiplier = Math.sqrt(-2 * Math.log(w) / w);
+    const z = u * multiplier; 
+    
+    // T-분포 근사 (df > 30이면 정규분포와 유사)
+    const x = z * Math.sqrt(df / (df - 2)); 
+    return mean + x * stdDev;
+};
+
 // --- [신설] JSON 파일 내보내기 ---
 var exportToJSON = (data, filename) => {
     const jsonStr = JSON.stringify(data, null, 2);
@@ -96,7 +179,6 @@ var generateVerificationCSV = (scenario, resultLog, fileName) => {
     csvContent += `Conversion Age,${scenario.settings.lockedIn.conversionAge}\n`;
     csvContent += `Unlocking %,${scenario.settings.lockedIn.unlockingPercent}\n`;
 
-    // ★★★ [추가] 배우자 설정 정보 (검증용) ★★★
     const spouse = scenario.settings.spouse || {};
     csvContent += "\n--- SPOUSE SETTINGS ---\n";
     csvContent += `Has Spouse,${spouse.hasSpouse ? 'Yes' : 'No'}\n`;
@@ -111,7 +193,6 @@ var generateVerificationCSV = (scenario, resultLog, fileName) => {
     // 2. 섹션: 시뮬레이션 상세 로그 (Outputs)
     csvContent += "\n\n--- SIMULATION DETAILED LOG (OUTPUTS) ---\n";
     
-    // 헤더 생성
     const headers = [
         "Year", "Age", 
         "Start Net Worth", "End Net Worth", 
@@ -121,7 +202,6 @@ var generateVerificationCSV = (scenario, resultLog, fileName) => {
     ];
     csvContent += headers.join(",") + "\n";
 
-    // 데이터 행 생성
     resultLog.forEach(row => {
         const bals = row.balances || {};
         const wds = row.withdrawals || {};
@@ -136,7 +216,6 @@ var generateVerificationCSV = (scenario, resultLog, fileName) => {
         csvContent += line.join(",") + "\n";
     });
 
-    // 다운로드 트리거
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -144,4 +223,36 @@ var generateVerificationCSV = (scenario, resultLog, fileName) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+};
+
+// ★★★ [신설] 자산 매도 시 비례적인 양도소득(Capital Gain) 및 ACB 조정 계산 ★★★
+var calculateProportionalCapitalGains = (withdrawAmount, holdings, acb) => {
+    const totalValue = Object.values(holdings).reduce((sum, val) => sum + val, 0);
+    if (totalValue <= 0 || withdrawAmount <= 0) {
+        return { taxableGain: 0, newAcb: deepCopy(acb) };
+    }
+
+    const withdrawalRatio = withdrawAmount / totalValue;
+    let totalCapitalGain = 0;
+    const newAcb = deepCopy(acb);
+
+    for (const asset in holdings) {
+        const assetValue = holdings[asset];
+        const assetAcb = acb[asset] || 0;
+        
+        // 해당 자산에서 인출되는 금액
+        const assetWithdrawal = assetValue * withdrawalRatio;
+        
+        // 해당 자산의 ACB 감소분 (비례적)
+        const acbReduction = assetAcb * withdrawalRatio;
+        
+        // 자본 이득 = 매도 금액 - ACB 감소분
+        const capitalGain = Math.max(0, assetWithdrawal - acbReduction);
+        
+        totalCapitalGain += capitalGain;
+        newAcb[asset] -= acbReduction;
+    }
+
+    // 과세 대상 양도소득은 50%
+    return { taxableGain: totalCapitalGain * 0.5, newAcb: newAcb };
 };
