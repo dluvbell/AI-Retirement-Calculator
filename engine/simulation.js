@@ -28,12 +28,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
     });
     
     // ★★★ [버그 수정] accounts는 advancedSettings 구조를 사용 ★★★
-    // 이제 data.js에서 lira/lif가 정의되어 있으므로 바로 deepCopy 가능
     let accounts = deepCopy(scenario.settings.advancedSettings);
-    
-    // ★★★ [삭제됨] 예전에 있던 LIRA/LIF 강제 초기화 코드 삭제 (data.js 수정으로 해결됨) ★★★
-    // accounts.lira = { holdings: {}, acb: {} }; 
-    // accounts.lif = { holdings: {}, acb: {} };
     
     let balances = {
         checking: scenario.settings.initialBalances.checking,
@@ -58,7 +53,6 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
                 newHoldings[assetKey] = totalValue * (simpleComposition[assetKey] / 100);
             }
             
-            // ★★★ [수정] accounts[acctKey]가 존재하는지 확인 후 할당 ★★★
             if (accounts[acctKey]) {
                 accounts[acctKey].holdings = newHoldings;
                 
@@ -80,10 +74,6 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         balances.tfsa = getAccountTotal(accounts.tfsa.holdings);
         balances.nonReg = getAccountTotal(accounts.nonReg.holdings);
         
-        // ★★★ [수정] LIRA/LIF은 initialBalances 값을 그대로 사용하되, holdings가 비어있으면 채워줌 ★★★
-        // 고급 모드에서는 사용자가 직접 holdings를 입력했을 것이므로, 그 합계를 우선 사용해야 함.
-        // 단, 사용자가 입력을 안 했을 경우(0)에는 initialBalances를 사용하고 RRSP 비율을 따름.
-        
         const advancedLiraTotal = getAccountTotal(accounts.lira.holdings);
         const advancedLifTotal = getAccountTotal(accounts.lif.holdings);
         
@@ -93,7 +83,6 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         if (advancedLifTotal > 0) balances.lif = advancedLifTotal;
         else balances.lif = scenario.settings.initialBalances.lif || 0;
 
-        // 만약 Advanced Mode인데 LIRA Holdings가 0이고 잔액은 있다면 -> RRSP 비율로 자동 분배 (편의 기능)
         if (advancedLiraTotal === 0 && balances.lira > 0) {
             const tempComp = getAccountComposition(accounts.rrsp.holdings); 
             accounts.lira.holdings = {};
@@ -101,7 +90,6 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
                 accounts.lira.holdings[assetKey] = balances.lira * (tempComp[assetKey] / 100);
             }
         }
-        // LIF도 동일 처리
         if (advancedLifTotal === 0 && balances.lif > 0) {
             const tempComp = getAccountComposition(accounts.rrsp.holdings);
             accounts.lif.holdings = {};
@@ -451,6 +439,97 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
     } 
 
    return { status: 'SUCCESS', yearlyData, fundDepletionYear };
+};
+
+// ★★★ [복구] 누락되었던 Helper 함수들 복구 ★★★
+
+const getAccountTotal = (holdings) => {
+    let total = 0;
+    if (!holdings) return 0;
+    for (const key in holdings) {
+        total += holdings[key];
+    }
+    return total;
+};
+
+const getAccountComposition = (holdings) => {
+    const total = getAccountTotal(holdings);
+    const composition = {};
+    if (total === 0) return composition;
+    for (const key in holdings) {
+        composition[key] = (holdings[key] / total) * 100;
+    }
+    return composition;
+};
+
+const getInflationFactor = (currentYear, startYear, rate) => {
+    return Math.pow(1 + rate, currentYear - startYear);
+};
+
+const calculateCurrentComposition = (scenario, currentYear) => {
+    const { startYear, endYear } = scenario.settings;
+    const { startComposition, endComposition } = scenario.settings.portfolio;
+    
+    if (currentYear <= startYear) return startComposition;
+    if (currentYear >= endYear) return endComposition;
+
+    const totalDuration = endYear - startYear;
+    const elapsed = currentYear - startYear;
+    const progress = elapsed / totalDuration;
+
+    const currentComp = {};
+    for (const key in startComposition) {
+        const startVal = startComposition[key] || 0;
+        const endVal = endComposition[key] || 0;
+        currentComp[key] = startVal + (endVal - startVal) * progress;
+    }
+    return currentComp;
+};
+
+const calculateProportionalCapitalGains = (amountToWithdraw, holdings, acb) => {
+    const totalValue = getAccountTotal(holdings);
+    if (totalValue <= 0 || amountToWithdraw <= 0) return { taxableGain: 0, newAcb: acb };
+
+    const withdrawalRatio = amountToWithdraw / totalValue;
+    let totalAcbUsed = 0;
+    const newAcb = deepCopy(acb);
+
+    for (const asset in newAcb) {
+         const acbReduction = (newAcb[asset] || 0) * withdrawalRatio;
+         newAcb[asset] -= acbReduction;
+         totalAcbUsed += acbReduction;
+    }
+
+    const taxableGain = Math.max(0, amountToWithdraw - totalAcbUsed) * 0.5; 
+    return { taxableGain, newAcb };
+};
+
+const createPRNG = (seed) => {
+    return () => {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+};
+
+const generateTDistributionRandom = (mean, stdDev, df, prng) => {
+    const u = 1 - (prng ? prng() : Math.random()); 
+    const v = (prng ? prng() : Math.random());
+    const z = Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+    return mean + z * stdDev; 
+};
+
+const determineStrategicParameters = (age, totalAssets, rrspRatio, riskProfile, expertMode) => {
+    let rrspBonus = 0;
+    let tfsaPenalty = 0;
+    if (age < 65) {
+        rrspBonus = 0.05; 
+    }
+    if (age > 71) {
+        tfsaPenalty = 0.05; 
+    }
+    return { rrspBonus, tfsaPenalty };
 };
 
 const transferHoldings = (sourceHoldings, destinationHoldings, totalAmountToTransfer) => {
