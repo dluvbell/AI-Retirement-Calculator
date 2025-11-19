@@ -295,6 +295,10 @@ var createApiPayload = (scenario) => {
         return mapped;
     };
 
+    // ★★★ [수정] birthYear 선언 위치 변경 (TDZ 오류 해결) ★★★
+    // [수입/지출 $0 버그 수정] birthYear를 가져와서 '연도'를 '나이'로 변환 ★★★
+    const birthYear = scenario.settings.birthYear; 
+
     // 5. 일회성 이벤트 변환 (세금 정보 포함)
     const mappedEvents = scenario.settings.oneTimeEvents.map(event => ({
         // ★★★ [수정] 달력 연도(event.year)를 나이(event.year - birthYear)로 변환 ★★★
@@ -304,9 +308,6 @@ var createApiPayload = (scenario) => {
         taxationType: event.taxationType || (event.type === 'income' ? 'nonTaxable' : 'n/a'),
         acb: event.acb || 0
     }));
-
-    // ★★★ [수입/지출 $0 버그 수정] birthYear를 가져와서 '연도'를 '나이'로 변환 ★★★
-    const birthYear = scenario.settings.birthYear;
 
     // 6. 최종 페이로드 조립
     const payload = {
