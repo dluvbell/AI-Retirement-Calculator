@@ -4,13 +4,13 @@ const BasicSettings = ({ scenario, onUpdate }) => {
     const { province, birthYear, startYear, endYear } = scenario.settings;
     const lifeExpectancy = endYear - birthYear;
 
-    // ★★★ [신설] 배우자 설정 데이터 초기화 (없으면 기본값 생성) ★★★
-    // 기존 시나리오에 spouse 데이터가 없을 수 있으므로 안전하게 초기화합니다.
+    // ★★★ [수정] 배우자 설정 데이터 초기화 (cppIncome 추가) ★★★
     const spouse = scenario.settings.spouse || {
         hasSpouse: false,
-        birthYear: birthYear, // 기본값: 본인과 동일
-        pensionIncome: 0,
-        baseIncome: 0,
+        birthYear: birthYear, 
+        cppIncome: 0,     // [신설] CPP Sharing 전용 소득
+        pensionIncome: 0, // [기존] Pension Splitting 대상 소득
+        baseIncome: 0,    // [기존] 스플릿 불가능 소득
         optimizeCppSharing: false,
         useSpouseAgeForRrif: false
     };
@@ -38,14 +38,15 @@ const BasicSettings = ({ scenario, onUpdate }) => {
         onUpdate(key, numericValue);
     };
 
-    // ★★★ [신설] 배우자 설정 변경 핸들러 ★★★
+    // ★★★ [수정] 배우자 설정 변경 핸들러 (cppIncome 처리 추가) ★★★
     const handleSpouseChange = (key, value) => {
-        // 숫자로 변환해야 하는 필드들
-        const numericValue = (key === 'birthYear' || key === 'pensionIncome' || key === 'baseIncome') 
+        // 숫자로 변환해야 하는 필드들 목록에 cppIncome 추가
+        const numericKeys = ['birthYear', 'cppIncome', 'pensionIncome', 'baseIncome'];
+        
+        const numericValue = numericKeys.includes(key)
             ? (parseFloat(value) || 0) 
             : value;
         
-        // 기존 spouse 객체를 복사하고 값을 업데이트한 뒤, 전체 설정을 업데이트
         const newSpouseSettings = { ...spouse, [key]: numericValue };
         onUpdate('spouse', newSpouseSettings);
     };
@@ -166,7 +167,7 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                 </div>
             </div>
 
-            {/* ★★★ [신설] Spouse Settings 섹션 ★★★ */}
+            {/* ★★★ Spouse Settings 섹션 (3단 분리 입력 적용) ★★★ */}
             <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', marginTop: '24px', borderTop: '1px solid #374151', paddingTop: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 Spouse Information
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '14px', fontWeight: 'normal', cursor: 'pointer', color: '#a5f3fc' }}>
@@ -192,10 +193,30 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                             {birthYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
+
+                    {/* [신설] Spouse CPP (Sharing 대상) */}
                     <div>
                         <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}}>
-                            <span>Pension Income ($/yr)</span>
-                            <Tooltip text="Eligible for Pension Income Splitting (e.g., RRIF, LIF, DB Pension). Can be split up to 50% with spouse.">
+                            <span>Spouse CPP ($/yr)</span>
+                            <Tooltip text="Spouse's Canada Pension Plan income. If 'Optimize CPP Sharing' is checked, this will be pooled with your CPP and split 50/50 for tax purposes.">
+                                <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                </svg>
+                            </Tooltip>
+                        </label>
+                        <input
+                            type="number"
+                            style={inputStyle}
+                            value={spouse.cppIncome}
+                            onChange={(e) => handleSpouseChange('cppIncome', e.target.value)}
+                        />
+                    </div>
+
+                    {/* [기존] Pension Income (Splitting 대상) */}
+                    <div>
+                        <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}}>
+                            <span>Eligible Pension ($/yr)</span>
+                            <Tooltip text="Income eligible for Pension Income Splitting (e.g., RRIF, LIF, DB Pension). Up to 50% can be allocated to the lower-income spouse to reduce tax.">
                                 <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                                 </svg>
@@ -208,10 +229,12 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                             onChange={(e) => handleSpouseChange('pensionIncome', e.target.value)}
                         />
                     </div>
+
+                    {/* [기존] Base Income (Splitting 불가) */}
                     <div>
                         <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}}>
                             <span>Base Income ($/yr)</span>
-                            <Tooltip text="Not eligible for splitting (e.g., OAS, CPP, Employment Income). Note: Check 'Optimize CPP Sharing' below to split CPP.">
+                            <Tooltip text="Income NOT eligible for splitting (e.g., OAS, Employment Income, Investment Income).">
                                 <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                                 </svg>
