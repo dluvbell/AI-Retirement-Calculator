@@ -24,38 +24,26 @@ const DetailedLogTable = ({ logData, scenarioName }) => {
                         <tr>
                             <th style={{...thStyle, textAlign: 'left'}}>Year(Age)</th>
                             <th style={{...thStyle, color: 'white'}}>End Net Worth</th>
-                            
-                            {/* ★★★ [수정] 인출(W/D) 대신 잔액(Balance) 컬럼으로 변경하여 자산 이동 확인 ★★★ */}
                             <th style={{...thStyle, color: '#fbbf24'}}>LIRA Bal</th>
                             <th style={{...thStyle, color: '#34d399'}}>LIF Bal</th>
                             <th style={{...thStyle, color: '#f472b6'}}>RRSP Bal</th>
                             <th style={{...thStyle, color: '#60a5fa'}}>TFSA Bal</th>
                             <th style={{...thStyle, color: '#a78bfa'}}>Non-Reg Bal</th>
-                            
                             <th style={{...thStyle, color: '#9ca3af', borderLeft: '1px solid #4b5563'}}>Tax Paid</th>
                         </tr>
                     </thead>
                     <tbody>
                         {logData.map((d, index) => {
-                            // Python 백엔드는 'balances' 키를, JS 시뮬레이터는 'endBalances' 키를 사용할 수 있으므로 호환성 처리
                             const bals = d.balances || d.endBalances || {};
-                            
                             return (
                                 <tr key={d.year} style={{ backgroundColor: index % 2 === 0 ? '#1f2937' : 'transparent' }}>
                                     <td style={{...tdStyle, textAlign: 'left', fontWeight: '600', color: '#e5e7eb'}}>{d.year} ({d.age})</td>
                                     <td style={{...tdStyle, fontWeight: 'bold', color: 'white'}}>{formatCurrency(d.end_nw || d.endTotalBalance)}</td>
-                                    
-                                    {/* LIRA 잔액 (노란색) */}
                                     <td style={{...tdStyle, color: '#fbbf24'}}>{formatCurrency(bals.lira || 0)}</td>
-                                    {/* LIF 잔액 (초록색) */}
                                     <td style={{...tdStyle, color: '#34d399'}}>{formatCurrency(bals.lif || 0)}</td>
-                                    {/* RRSP 잔액 (분홍색) */}
                                     <td style={{...tdStyle, color: '#f472b6'}}>{formatCurrency(bals.rrsp || 0)}</td>
-                                    {/* TFSA 잔액 (파란색) */}
                                     <td style={{...tdStyle, color: '#60a5fa'}}>{formatCurrency(bals.tfsa || 0)}</td>
-                                    {/* Non-Reg 잔액 (보라색) */}
                                     <td style={{...tdStyle, color: '#a78bfa'}}>{formatCurrency(bals.non_reg || bals.nonReg || 0)}</td>
-                                    
                                     <td style={{...tdStyle, color: '#9ca3af', borderLeft: '1px solid #4b5563'}}>{formatCurrency(d.tax_paid || d.taxPayable)}</td>
                                 </tr>
                             );
@@ -79,21 +67,43 @@ const ResultsSection = ({ allScenarioResults, aiResults, scenarios, activeScenar
 
             const ctx = chartRef.current.getContext('2d');
             
-            const datasets = scenarios.map((scenario, index) => {
-                const result = aiResults[scenario.id];
-                if (!result || !result.yearlyData) return null;
+            const datasets = [];
+            // ★★★ [수정] AI 및 Baseline 데이터셋 모두 추가 ★★★
+            scenarios.forEach((scenario, index) => {
+                const aiResult = aiResults[scenario.id];
+                const baseResult = allScenarioResults[scenario.id];
+                const color = colors[index % colors.length];
 
-                return {
-                    label: `${scenario.name} (AI Optimized)`,
-                    data: result.yearlyData.map(d => d.endTotalBalance),
-                    borderColor: colors[index % colors.length],
-                    borderWidth: scenario.id === activeScenario.id ? 3 : 1.5,
-                    pointRadius: 0,
-                    tension: 0.4
-                };
-            }).filter(Boolean);
+                // 1. AI 데이터셋 (실선)
+                if (aiResult && aiResult.yearlyData) {
+                    datasets.push({
+                        label: `${scenario.name} (AI)`,
+                        data: aiResult.yearlyData.map(d => d.endTotalBalance),
+                        borderColor: color,
+                        backgroundColor: color,
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    });
+                }
+                // 2. Baseline 데이터셋 (점선, 회색)
+                if (baseResult && baseResult.yearlyData) {
+                    datasets.push({
+                        label: `${scenario.name} (Baseline)`,
+                        data: baseResult.yearlyData.map(d => d.endTotalBalance),
+                        borderColor: '#9ca3af', // 회색
+                        borderDash: [5, 5],     // 점선 처리
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    });
+                }
+            });
 
-            const activeResultForLabels = aiResults[activeScenario.id] || Object.values(aiResults).find(r => r);
+            // X축 라벨 생성 (활성 시나리오 기준)
+            const activeResultForLabels = aiResults[activeScenario.id] || allScenarioResults[activeScenario.id];
             const labels = activeResultForLabels && activeResultForLabels.yearlyData 
                 ? activeResultForLabels.yearlyData.map(d => d.age)
                 : [];
@@ -104,19 +114,40 @@ const ResultsSection = ({ allScenarioResults, aiResults, scenarios, activeScenar
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    // ★★★ [수정] 툴팁 모드 변경 (수직선 위의 모든 데이터 표시) ★★★
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     plugins: {
                         legend: { labels: { color: '#d1d5db' } },
-                        title: { display: true, text: 'AI Optimized Net Worth Comparison', color: 'white', font: { size: 16 } }
+                        title: { display: true, text: 'Net Worth Projection (AI vs Baseline)', color: 'white', font: { size: 16 } },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#d1d5db',
+                            borderColor: '#374151',
+                            borderWidth: 1
+                        }
                     },
                     scales: {
-                        x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(75, 85, 99, 0.5)' }, title: { display: true, text: 'Age', color: '#9ca3af'} },
-                        y: { ticks: { color: '#9ca3af', callback: (value) => formatCurrency(value) }, grid: { color: 'rgba(75, 85, 99, 0.5)' } }
+                        x: { 
+                            ticks: { color: '#9ca3af' }, 
+                            grid: { color: 'rgba(75, 85, 99, 0.1)' }, 
+                            title: { display: true, text: 'Age', color: '#9ca3af'} 
+                        },
+                        y: { 
+                            ticks: { color: '#9ca3af', callback: (value) => formatCurrency(value) }, 
+                            grid: { color: 'rgba(75, 85, 99, 0.1)' } 
+                        }
                     }
                 }
             });
         }
         return () => { if (chartInstanceRef.current) { chartInstanceRef.current.destroy(); } };
-    }, [aiResults, scenarios, activeScenario.id, colors]);
+    }, [aiResults, allScenarioResults, scenarios, activeScenario.id, colors]);
 
     const sectionStyle = { padding: '20px', border: '1px solid #374151', margin: '20px', borderRadius: '8px' };
     const h2Style = { fontSize: '20px', fontWeight: 'bold', marginBottom: '15px' };
@@ -147,7 +178,6 @@ const ResultsSection = ({ allScenarioResults, aiResults, scenarios, activeScenar
 
             <div style={{ height: '400px', position: 'relative' }}><canvas ref={chartRef}></canvas></div>
 
-            {/* ★★★ [수정] AI 결과가 있으면 항상 상세 잔액 로그를 표시합니다 (devMode 제거됨) ★★★ */}
             {activeAiResult && <DetailedLogTable logData={activeAiResult.detailedLog} scenarioName={activeScenario.name} />}
         </div>
     );
