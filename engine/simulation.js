@@ -13,7 +13,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
     const baseYearForInflation = 2025; 
     const simulationScenario = deepCopy(scenario);
 
-    // [수정] 은퇴 시점 가치로 변환 (사용자 요청 사항 반영)
+    // [수정] 은퇴 시점 가치로 변환 (초기 설정은 올바르게 /100 처리되어 있었음)
     simulationScenario.settings.incomes.forEach(item => {
         if (item.startYear > baseYearForInflation) {
             const yearsToCompound = item.startYear - baseYearForInflation;
@@ -121,8 +121,10 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         const startAccounts = deepCopy(accounts);
         let decisionLog = {};
 
-        const annualExpenses = simulationScenario.settings.expenses.reduce((acc, exp) => (currentYear >= exp.startYear && currentYear <= (exp.endYear || endYear) ? acc + exp.amount * getInflationFactor(currentYear, exp.startYear, exp.growthRate) : acc), 0);
-        const annualIncomes = simulationScenario.settings.incomes.reduce((acc, inc) => (currentYear >= inc.startYear && currentYear <= (inc.endYear || endYear) ? acc + inc.amount * getInflationFactor(currentYear, inc.startYear, inc.growthRate) : acc), 0);
+        // ★★★ [치명적 오류 수정] growthRate(예: 2.5)를 100으로 나누어 전달 (예: 0.025) ★★★
+        const annualExpenses = simulationScenario.settings.expenses.reduce((acc, exp) => (currentYear >= exp.startYear && currentYear <= (exp.endYear || endYear) ? acc + exp.amount * getInflationFactor(currentYear, exp.startYear, (exp.growthRate || 0) / 100.0) : acc), 0);
+        const annualIncomes = simulationScenario.settings.incomes.reduce((acc, inc) => (currentYear >= inc.startYear && currentYear <= (inc.endYear || endYear) ? acc + inc.amount * getInflationFactor(currentYear, inc.startYear, (inc.growthRate || 0) / 100.0) : acc), 0);
+        
         const oneTimeEventsThisYear = scenario.settings.oneTimeEvents.filter(e => e.year === currentYear);
         const oneTimeIncome = oneTimeEventsThisYear.reduce((acc, e) => e.type === 'income' ? acc + e.amount : acc, 0);
         const oneTimeExpense = oneTimeEventsThisYear.reduce((acc, e) => e.type === 'expense' ? acc + e.amount : acc, 0);
@@ -349,7 +351,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         });
 
         const oasIncomeData = scenario.settings.incomes.find(i => i.type === 'OAS');
-        const oasIncome = oasIncomeData ? oasIncomeData.amount * getInflationFactor(currentYear, oasIncomeData.startYear, oasIncomeData.growthRate / 100.0) : 0;
+        const oasIncome = oasIncomeData ? oasIncomeData.amount * getInflationFactor(currentYear, oasIncomeData.startYear, (oasIncomeData.growthRate || 0) / 100.0) : 0;
         
         const totalTaxableWithdrawal = totalWithdrawalsThisYear.rrsp + totalWithdrawalsThisYear.lif;
         
