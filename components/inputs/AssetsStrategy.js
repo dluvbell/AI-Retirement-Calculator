@@ -11,7 +11,6 @@ const CompositionInputs = ({ title, composition, onCompositionChange }) => {
         totalColor = '#f87171'; // Red for > 100
     }
 
-    // 툴팁 텍스트를 title에 따라 동적으로 결정합니다
     let tooltipText = null;
     if (title === 'Start Composition') {
         tooltipText = "Your portfolio's asset allocation at the start of retirement. The simulation will gradually shift from this to the End Composition over time.";
@@ -25,7 +24,6 @@ const CompositionInputs = ({ title, composition, onCompositionChange }) => {
     };
     const labelStyle = { display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '4px' };
     
-    // 6개 자산군으로 수정
     const assetKeys = ['growth', 'balanced', 'dividend_can', 'dividend_us', 'bond', 'gic'];
 
     return (
@@ -64,10 +62,8 @@ const CompositionInputs = ({ title, composition, onCompositionChange }) => {
 const AssetsStrategy = ({ scenario, onUpdate }) => {
 
     const { useSimpleMode } = scenario.settings.portfolio;
-    // 배우자 활성화 여부 확인
     const hasSpouse = scenario.settings.spouseSettings && scenario.settings.spouseSettings.enabled;
 
-    // [신규] 포트폴리오 배분율(%)이 변경될 때 호출되는 함수
     const handleCompositionChange = (compositionType, assetKey, newValue) => {
         const value = parseFloat(newValue) || 0;
         const newPortfolio = {
@@ -80,10 +76,8 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
         onUpdate('portfolio', newPortfolio);
     };
 
-    // Simple Mode 클릭 시 override 플래그를 false로 설정
     const handleSimpleModeClick = () => {
         onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: true });
-        // 모든 계좌의 override를 false로
         const accounts = ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif', 'spouse_rrsp', 'spouse_tfsa', 'spouse_nonReg', 'spouse_lira', 'spouse_lif'];
         const newAdvancedSettings = { ...scenario.settings.advancedSettings };
         
@@ -95,10 +89,8 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
         onUpdate('advancedSettings', newAdvancedSettings);
     };
 
-    // Advanced Mode 클릭 시 override 플래그를 true로 설정
     const handleAdvancedModeClick = () => {
         onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: false });
-        // 모든 계좌의 override를 true로
         const accounts = ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif', 'spouse_rrsp', 'spouse_tfsa', 'spouse_nonReg', 'spouse_lira', 'spouse_lif'];
         const newAdvancedSettings = { ...scenario.settings.advancedSettings };
         
@@ -110,14 +102,13 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
         onUpdate('advancedSettings', newAdvancedSettings);
     };
 
-    // [신규] 고급 모드에서 자산/ACB 값이 변경될 때 호출되는 함수
     const handleAdvancedChange = (accountKey, assetKey, field, value) => {
         const numericValue = parseFloat(value) || 0;
         const account = scenario.settings.advancedSettings[accountKey];
 
         const newAccountData = {
             ...account,
-            [field]: { // 'field' is 'holdings' or 'acb'
+            [field]: { 
                 ...account[field],
                 [assetKey]: numericValue
             }
@@ -148,10 +139,8 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
 
     const assetKeys = ['growth', 'balanced', 'dividend_can', 'dividend_us', 'bond', 'gic'];
     
-    // Advanced Mode 테이블용 계좌 키 목록 동적 생성
     let accountKeys = ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif'];
     if (hasSpouse) {
-        // 부부 계좌를 나란히 또는 교차해서 보여주기 위해 배열 재구성
         accountKeys = [
             'rrsp', 'spouse_rrsp',
             'tfsa', 'spouse_tfsa',
@@ -173,7 +162,6 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
         fontSize: '14px'
     };
 
-    // Simple Mode 입력 그룹 렌더링 헬퍼
     const renderSimpleInputGroup = (label, clientKey, spouseKey, tooltipText = null) => (
         <div style={{ marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -217,7 +205,6 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
                 Assets & Strategy
             </h3>
             
-            {/* --- 모드 토글 스위치 --- */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#374151', borderRadius: '9999px', padding: '4px' }}>
                     <button
@@ -257,13 +244,11 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
 
             <div style={{ marginTop: '16px' }}>
                 {useSimpleMode ? (
-                    // --- 단순 모드 UI ---
                     <div>
                         <h4 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', borderBottom: '1px solid #374151', paddingBottom: '8px' }}>
                             Initial Asset Totals {hasSpouse && "(Combined View)"}
                         </h4>
                         
-                        {/* 부부 통합 입력 필드 */}
                         {renderSimpleInputGroup("RRSP Total", "rrsp", "spouse_rrsp")}
                         {renderSimpleInputGroup("TFSA Total", "tfsa", "spouse_tfsa")}
                         {renderSimpleInputGroup("Non-Registered Total", "nonReg", "spouse_nonReg")}
@@ -274,11 +259,10 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
                         {renderSimpleInputGroup(
                             "ACB Ratio (%)", 
                             "nonRegAcbRatio", 
-                            "spouseNonRegAcbRatio", // [신규] Spouse Key
+                            "spouseNonRegAcbRatio", 
                             "Adjusted Cost Base (ACB) as a percentage of the Non-Registered Total. Helps calculate taxable capital gains."
                         )}
 
-                        {/* Chequing Account (Shared/Joint usually) */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             <div>
                                 <label style={labelStyle}>Checking Balance (Joint)</label>
@@ -307,7 +291,6 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
                             </div>
                         </div>
 
-                        {/* 포트폴리오 배분 입력 (Shared Glide Path) */}
                         <CompositionInputs
                             title="Start Composition (Shared)"
                             composition={scenario.settings.portfolio.startComposition}
@@ -320,7 +303,6 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
                         />
                     </div>
                 ) : (
-                    // --- 고급 모드 UI (테이블) ---
                     <div className="overflow-x-auto">
                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
                             <thead>
@@ -333,7 +315,7 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
                                 {accountKeys.map(acctKey => {
                                     const isSpouse = acctKey.startsWith('spouse_');
                                     const label = isSpouse ? acctKey.replace('spouse_', '').toUpperCase() + ' (Spouse)' : acctKey.toUpperCase();
-                                    const rowColor = isSpouse ? '#374151' : 'transparent'; // 배우자 행 구분 색상
+                                    const rowColor = isSpouse ? '#374151' : 'transparent'; 
 
                                     return (
                                         <tr key={acctKey} style={{ borderBottom: '1px solid #374151', backgroundColor: rowColor }}>
@@ -343,7 +325,6 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
                                             {assetKeys.map(assetKey => (
                                                 <td key={assetKey} style={tableCellStyle}>
                                                     {(acctKey === 'nonReg' || acctKey === 'spouse_nonReg') ? (
-                                                        // Non-Registered 계좌는 Amount와 ACB 두 개 입력
                                                         <div>
                                                             <label style={{fontSize: '12px', color: '#9ca3af'}}>Amount</label>
                                                             <input
@@ -361,7 +342,6 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
                                                             />
                                                         </div>
                                                     ) : (
-                                                        // RRSP, TFSA, LIRA, LIF는 Amount만 입력
                                                         <div>
                                                             <label style={{fontSize: '12px', color: '#9ca3af'}}>Amount</label>
                                                             <input
