@@ -138,6 +138,45 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                         {lifeExpectancyOptions.map(age => <option key={age} value={age}>{age}</option>)}
                     </select>
                 </div>
+
+                {/* ★★★ [신규] 인플레이션 입력 필드 추가 ★★★ */}
+                <div>
+                    <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}} htmlFor="generalInflation">
+                        <span>General Inflation (%)</span>
+                        <Tooltip text="The annual rate at which living expenses, CPP/OAS benefits, and other indexed incomes increase.">
+                            <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                            </svg>
+                        </Tooltip>
+                    </label>
+                    <input
+                        type="number"
+                        id="generalInflation"
+                        style={inputStyle}
+                        value={scenario.settings.generalInflation}
+                        onChange={(e) => handleSettingChange('generalInflation', e.target.value)}
+                        step="0.1"
+                    />
+                </div>
+
+                <div>
+                    <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}} htmlFor="taxInflationRate">
+                        <span>Tax Inflation (%)</span>
+                        <Tooltip text="The annual rate at which tax brackets and TFSA contribution limits increase (Indexation). Usually similar to General Inflation.">
+                            <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                            </svg>
+                        </Tooltip>
+                    </label>
+                    <input
+                        type="number"
+                        id="taxInflationRate"
+                        style={inputStyle}
+                        value={scenario.settings.taxInflationRate}
+                        onChange={(e) => handleSettingChange('taxInflationRate', e.target.value)}
+                        step="0.1"
+                    />
+                </div>
             </div>
 
             <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', marginTop: '24px', borderTop: '1px solid #374151', paddingTop: '16px' }}>
