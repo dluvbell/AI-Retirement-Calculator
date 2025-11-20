@@ -64,15 +64,8 @@ const CompositionInputs = ({ title, composition, onCompositionChange }) => {
 const AssetsStrategy = ({ scenario, onUpdate }) => {
 
     const { useSimpleMode } = scenario.settings.portfolio;
-    // ★★★ [신설] 배우자 활성화 여부 확인 ★★★
+    // 배우자 활성화 여부 확인
     const hasSpouse = scenario.settings.spouseSettings && scenario.settings.spouseSettings.enabled;
-
-    // [신규] 단순 모드에서 계좌 총액이 변경될 때 호출되는 함수
-    const handleTotalChange = (accountKey, newTotalValue) => {
-        // Simple Mode에서는 initialBalances를 직접 수정하므로 이 함수는 사용되지 않을 수 있으나,
-        // Advanced Mode와의 호환성을 위해 남겨둘 수 있음. 
-        // (현재 로직상 Simple Mode는 input onChange에서 직접 onUpdate('initialBalances', ...)를 호출함)
-    };
 
     // [신규] 포트폴리오 배분율(%)이 변경될 때 호출되는 함수
     const handleCompositionChange = (compositionType, assetKey, newValue) => {
@@ -87,7 +80,7 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
         onUpdate('portfolio', newPortfolio);
     };
 
-    // [추가] Simple Mode 클릭 시 override 플래그를 false로 설정
+    // Simple Mode 클릭 시 override 플래그를 false로 설정
     const handleSimpleModeClick = () => {
         onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: true });
         // 모든 계좌의 override를 false로
@@ -102,7 +95,7 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
         onUpdate('advancedSettings', newAdvancedSettings);
     };
 
-    // [추가] Advanced Mode 클릭 시 override 플래그를 true로 설정
+    // Advanced Mode 클릭 시 override 플래그를 true로 설정
     const handleAdvancedModeClick = () => {
         onUpdate('portfolio', { ...scenario.settings.portfolio, useSimpleMode: false });
         // 모든 계좌의 override를 true로
@@ -153,10 +146,9 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
         fontSize: '12px', color: '#9ca3af', marginBottom: '2px', display:'block'
     };
 
-    // [AI 2.0] 자산군 정의
     const assetKeys = ['growth', 'balanced', 'dividend_can', 'dividend_us', 'bond', 'gic'];
     
-    // ★★★ [수정] Advanced Mode 테이블용 계좌 키 목록 동적 생성 ★★★
+    // Advanced Mode 테이블용 계좌 키 목록 동적 생성
     let accountKeys = ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif'];
     if (hasSpouse) {
         // 부부 계좌를 나란히 또는 교차해서 보여주기 위해 배열 재구성
@@ -271,30 +263,20 @@ const AssetsStrategy = ({ scenario, onUpdate }) => {
                             Initial Asset Totals {hasSpouse && "(Combined View)"}
                         </h4>
                         
-                        {/* ★★★ [수정] 부부 통합 입력 필드 ★★★ */}
+                        {/* 부부 통합 입력 필드 */}
                         {renderSimpleInputGroup("RRSP Total", "rrsp", "spouse_rrsp")}
                         {renderSimpleInputGroup("TFSA Total", "tfsa", "spouse_tfsa")}
                         {renderSimpleInputGroup("Non-Registered Total", "nonReg", "spouse_nonReg")}
                         {renderSimpleInputGroup("LIRA Total", "lira", "spouse_lira")}
                         {renderSimpleInputGroup("LIF Total", "lif", "spouse_lif")}
                         
-                        {/* ACB Ratio (Shared rule for simplicity, applied to both if spouse enabled) */}
-                        <div style={{ marginBottom: '16px' }}>
-                             <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}}>
-                                <span>ACB Ratio (%)</span>
-                                <Tooltip text="Adjusted Cost Base (ACB) as a percentage of the Non-Registered Total. Applied to both Client and Spouse (if enabled) in Simple Mode.">
-                                    <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                                    </svg>
-                                </Tooltip>
-                            </label>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={scenario.settings.initialBalances.nonRegAcbRatio}
-                                onChange={(e) => onUpdate('initialBalances', { ...scenario.settings.initialBalances, nonRegAcbRatio: parseFloat(e.target.value) || 0 })}
-                            />
-                        </div>
+                        {/* ★★★ [수정] ACB Ratio (Client & Spouse 분리) ★★★ */}
+                        {renderSimpleInputGroup(
+                            "ACB Ratio (%)", 
+                            "nonRegAcbRatio", 
+                            "spouseNonRegAcbRatio", // [신규] Spouse Key
+                            "Adjusted Cost Base (ACB) as a percentage of the Non-Registered Total. Helps calculate taxable capital gains."
+                        )}
 
                         {/* Chequing Account (Shared/Joint usually) */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
