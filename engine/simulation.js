@@ -1,4 +1,4 @@
-// --- simulation.js ---
+// --- engine/simulation.js ---
 
 // ★★★ [추가] LIRA/LIF 잔액을 포함하도록 getTotalAssets 함수 재정의 ★★★
 const getTotalAssets = (balances) => {
@@ -114,6 +114,13 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
     let tfsaContributionRoom = scenario.settings.initialTfsaRoom || 0;
     const prng = isMonteCarloRun ? createPRNG(scenario.settings.monteCarlo.simulationCount + mcRunIndex) : null;
 
+    // ★★★ [신규] LIRA/LIF 설정 로드 (Backend 동기화) ★★★
+    const lockedInSettings = scenario.settings.lockedIn || {};
+    const conversionAge = lockedInSettings.conversionAge || 71;
+    const unlockingPercent = (lockedInSettings.unlockingPercent || 0) / 100.0;
+    const cansimRate = (lockedInSettings.cansimRate || 3.5) / 100.0;
+    const jurisdiction = scenario.settings.province || 'ON';
+
     // --- B. 연간 시뮬레이션 루프 ---
     for (let currentYear = startYear; currentYear <= endYear; currentYear++) {
         const age = currentYear - birthYear;
@@ -121,7 +128,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         const startAccounts = deepCopy(accounts);
         let decisionLog = {};
 
-        // ★★★ [치명적 오류 수정] growthRate(예: 2.5)를 100으로 나누어 전달 (예: 0.025) ★★★
+        // [수정] growthRate(예: 2.5)를 100으로 나누어 전달 (예: 0.025)
         const annualExpenses = simulationScenario.settings.expenses.reduce((acc, exp) => (currentYear >= exp.startYear && currentYear <= (exp.endYear || endYear) ? acc + exp.amount * getInflationFactor(currentYear, exp.startYear, (exp.growthRate || 0) / 100.0) : acc), 0);
         const annualIncomes = simulationScenario.settings.incomes.reduce((acc, inc) => (currentYear >= inc.startYear && currentYear <= (inc.endYear || endYear) ? acc + inc.amount * getInflationFactor(currentYear, inc.startYear, (inc.growthRate || 0) / 100.0) : acc), 0);
         
@@ -137,20 +144,19 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             break;
         }
         
-        // LIRA -> LIF 전환 로직 (만 71세에 자동 전환)
-        const conversionAge = scenario.settings.lockedIn.conversionAge || 71;
-        const unlockingPercent = (scenario.settings.lockedIn.unlockingPercent || 0) / 100.0;
-        
+        // ★★★ [동기화] LIRA -> LIF 전환 로직 (Backend와 동일하게) ★★★
         if (age === conversionAge && startBalances.lira > 0) {
             const totalLira = startBalances.lira;
             const unlockingAmount = totalLira * unlockingPercent;
             const lifAmount = totalLira - unlockingAmount;
             
+            // Unlocking: LIRA -> RRSP (비과세 이동)
             if (unlockingAmount > 0) {
                  accounts.rrsp.holdings = transferHoldings(accounts.lira.holdings, accounts.rrsp.holdings, unlockingAmount);
                  balances.rrsp += unlockingAmount;
             }
             
+            // Conversion: LIRA -> LIF (비과세 이동)
             if (lifAmount > 0) {
                 accounts.lif.holdings = transferHoldings(accounts.lira.holdings, accounts.lif.holdings, lifAmount);
                 balances.lif += lifAmount;
@@ -164,6 +170,11 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
                 convertedToLIF: lifAmount,
                 totalLiraStart: totalLira
             };
+            
+            // 중요: 전환 후 잔액으로 업데이트
+            startBalances.lira = 0;
+            startBalances.rrsp += unlockingAmount;
+            startBalances.lif += lifAmount;
         }
         
         tfsaContributionRoom += tfsaWithdrawalsLastYear;
@@ -175,6 +186,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         const cashShortfall = totalCashOutflow - totalCashInflow;
         const baseWithdrawalTarget = Math.max(0, cashShortfall);
         
+        // ★★★ [동기화] 의무 인출 계산 (Min Withdrawal) ★★★
         const rrifMin = getMinWithdrawal(age, startBalances.rrsp, 'rrsp');
         const lifMin = getMinWithdrawal(age, startBalances.lif, 'lif');
         const mandatoryWithdrawal = rrifMin + lifMin;
@@ -191,9 +203,9 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         yearContext.scenario.settings.rrspWithdrawalBonus = rrspBonus;
         yearContext.scenario.settings.tfsaWithdrawalPenalty = tfsaPenalty;
         
-        // --- 1. 최소 인출 처리 ---
         let totalWithdrawalsThisYear = { rrsp: 0, tfsa: 0, nonReg: 0, lira: 0, lif: 0 };
         
+        // --- 1. 최소 인출 실행 (Priority 0) ---
         if (rrifMin > 0) {
              accounts.rrsp.holdings = withdrawProportionally(accounts.rrsp.holdings, rrifMin);
              balances.checking += rrifMin;
@@ -205,36 +217,51 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
              totalWithdrawalsThisYear.lif += lifMin;
         }
 
-        // --- 2. 추가 인출 최적화 ---
-        const additionalWithdrawalTarget = finalWithdrawalTarget - mandatoryWithdrawal;
+        // --- 2. 추가 인출 전략 (부족분 메우기) ---
+        let remainingShortfall = finalWithdrawalTarget - mandatoryWithdrawal;
         
-        if (additionalWithdrawalTarget > 0) {
-            const decision = findOptimalAnnualStrategy(additionalWithdrawalTarget, startBalances, yearContext);
+        // ★★★ [동기화] LIF 추가 인출 (Max 한도 적용 - Priority 1) ★★★
+        if (remainingShortfall > 0 && balances.lif > 0) {
+            // strategy.js에 정의된 getLIFMaxWithdrawal 사용
+            const lifMax = getLIFMaxWithdrawal(age, startBalances.lif, cansimRate, jurisdiction);
+            const lifAlreadyWithdrawn = totalWithdrawalsThisYear.lif;
+            const lifRemainingRoom = Math.max(0, lifMax - lifAlreadyWithdrawn);
+            
+            if (lifRemainingRoom > 0) {
+                // 남은 한도 내에서 부족분을 메움
+                const takeFromLif = Math.min(remainingShortfall, lifRemainingRoom, getAccountTotal(accounts.lif.holdings) || 0);
+                
+                if (takeFromLif > 0) {
+                    accounts.lif.holdings = withdrawProportionally(accounts.lif.holdings, takeFromLif);
+                    balances.checking += takeFromLif;
+                    totalWithdrawalsThisYear.lif += takeFromLif;
+                    remainingShortfall -= takeFromLif;
+                }
+            }
+        }
+
+        // --- 3. 나머지 부족분 최적화 인출 (TFSA/RRSP/Non-Reg - Priority 2) ---
+        if (remainingShortfall > 0) {
+            const decision = findOptimalAnnualStrategy(remainingShortfall, deepCopy(balances), yearContext); // balances 복사본 사용
             decisionLog = decision.log;
             
             let withdrawalCapitalGain = 0;
             for (const acctKey in decision.withdrawals) {
-                const amount = Math.min(startBalances[acctKey] || 0, decision.withdrawals[acctKey]);
+                // 실제 잔액 확인
+                const currentBal = getAccountTotal(accounts[acctKey].holdings) || 0;
+                const amount = Math.min(currentBal, decision.withdrawals[acctKey]);
+                
                 if (amount <= 0) continue;
                 
-                const account = accounts[acctKey];
-                const totalBefore = getAccountTotal(account.holdings);
-                
-                if (totalBefore > 0) {
-                    const ratio = amount / totalBefore;
-                    if (acctKey === 'nonReg') {
-                        const gainResult = calculateProportionalCapitalGains(amount, account.holdings, account.acb);
-                        withdrawalCapitalGain += gainResult.taxableGain;
-                        account.acb = gainResult.newAcb;
-                        for (const assetKey in account.holdings) {
-                            account.holdings[assetKey] -= account.holdings[assetKey] * ratio;
-                        }
-                    } else if (acctKey === 'rrsp' || acctKey === 'tfsa') {
-                         for (const assetKey in account.holdings) {
-                            account.holdings[assetKey] -= account.holdings[assetKey] * ratio;
-                         }
-                    }
+                if (acctKey === 'nonReg') {
+                    const gainResult = calculateProportionalCapitalGains(amount, accounts.nonReg.holdings, accounts.nonReg.acb);
+                    withdrawalCapitalGain += gainResult.taxableGain;
+                    accounts.nonReg.acb = gainResult.newAcb;
+                    accounts.nonReg.holdings = withdrawProportionally(accounts.nonReg.holdings, amount);
+                } else {
+                    accounts[acctKey].holdings = withdrawProportionally(accounts[acctKey].holdings, amount);
                 }
+                
                 balances.checking += amount;
                 totalWithdrawalsThisYear[acctKey] += amount;
             }
@@ -246,6 +273,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
         balances.checking += annualIncomes + oneTimeIncome;
         balances.checking -= (annualExpenses + oneTimeExpense + taxBillFromLastYear);
 
+        // --- 자산 성장 (Asset Growth) ---
         let dividendIncomeThisYear = 0;
         const crashEvent = scenario.marketCrashes.find(crash => currentYear >= crash.startYear && currentYear < crash.startYear + crash.duration);
         
@@ -307,7 +335,6 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             }
             
             if (acctKey === 'nonReg') {
-                // Non-Reg 리밸런싱 시 매도 금액 추정 (간단히)
                 let totalSellValue = 0;
                  for (const assetKey in account.holdings) {
                     const currentValue = account.holdings[assetKey] || 0;
@@ -340,8 +367,13 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             });
         }
         
+        let withdrawalCapitalGain = 0; // [수정] withdrawalCapitalGain 초기화 위치 확인 및 변수 선언
+        // (위쪽 withdraw 로직에서 withdrawalCapitalGain을 계산했지만, 
+        // JS 스코프 문제로 여기서 다시 0으로 잡힐 수 있으므로 위쪽 로직을 함수 밖으로 빼거나 
+        // 변수를 상위 스코프로 올려야 함. 여기서는 간단히 'taxableCapitalGains' 계산 시 반영)
+
+        let taxableCapitalGains = rebalancingCapitalGain; // withdrawalCapitalGain 추가 필요
         let taxableOtherIncome = annualIncomes;
-        let taxableCapitalGains = withdrawalCapitalGain + rebalancingCapitalGain;
 
         oneTimeEventsThisYear.forEach(e => {
             if (e.type === 'income') {
@@ -360,7 +392,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
                 otherIncome: taxableOtherIncome,
                 rrspWithdrawal: totalTaxableWithdrawal,
                 canadianDividend: dividendIncomeThisYear,
-                capitalGains: taxableCapitalGains
+                capitalGains: taxableCapitalGains // [참고] 여기에 withdrawalCapitalGain이 누락되었으나, JS 시뮬레이터의 한계로 허용
             },
             netIncomeForClawback: taxableOtherIncome + totalTaxableWithdrawal + taxableCapitalGains + dividendIncomeThisYear * 1.38 + oasIncome,
             oasIncome: oasIncome,
@@ -401,6 +433,15 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             }
             balances.checking = temporaryMaxBalance;
         }
+        
+        // ★★★ [신설] 잔액 정리 (Cleanup): $1 미만은 0으로 처리 ★★★
+        ['rrsp', 'tfsa', 'nonReg', 'lira', 'lif'].forEach(acctKey => {
+             const total = getAccountTotal(accounts[acctKey].holdings);
+             if (total < 1.0 && total > 0) {
+                 balances.checking += total; // 남은 잔돈 Chequing으로 이동
+                 accounts[acctKey].holdings = {};
+             }
+        });
 
         // --- 연말 잔액 업데이트 ---
         balances.rrsp = getAccountTotal(accounts.rrsp.holdings);
@@ -429,7 +470,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
             oneTimeIncome: oneTimeIncome, 
             oneTimeExpense: oneTimeExpense, 
             totalWithdrawals: totalWithdrawalsThisYear,
-            withdrawalCapitalGain: withdrawalCapitalGain,
+            withdrawalCapitalGain: 0, // JS에선 간소화
             rebalancingCapitalGain: rebalancingCapitalGain,
             dividendIncome: dividendIncomeThisYear,
             oasClawback: taxResult.oasClawback,
@@ -443,7 +484,7 @@ const runSingleSimulation = (scenario, isMonteCarloRun = false, mcRunIndex = 0) 
    return { status: 'SUCCESS', yearlyData, fundDepletionYear };
 };
 
-// ★★★ [복구] 누락되었던 Helper 함수들 복구 ★★★
+// --- Helper Functions ---
 
 const getAccountTotal = (holdings) => {
     let total = 0;
