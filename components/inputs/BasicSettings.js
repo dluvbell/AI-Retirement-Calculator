@@ -2,9 +2,18 @@
 
 const BasicSettings = ({ scenario, onUpdate }) => {
     const { province, birthYear, startYear, endYear } = scenario.settings;
+    // ★★★ [안전장치] 데이터가 초기화되지 않았을 경우를 대비해 기본값 처리 ★★★
+    const spouseSettings = scenario.settings.spouseSettings || { 
+        enabled: false, 
+        birthYear: birthYear, 
+        cppAmount: 0, 
+        oasAmount: 0, 
+        baseIncome: 0 
+    };
+
     const lifeExpectancy = endYear - birthYear;
 
-    // ★★★ [신설] 주별 LIRA Unlocking 규정 데이터 ★★★
+    // 주별 LIRA Unlocking 규정 데이터
     const UNLOCKING_RULES = {
         'ON': { limit: 50, text: "Ontario allows 50% unlocking to RRSP/Cash within 60 days of transfer to LIF." },
         'AB': { limit: 50, text: "Alberta allows 50% unlocking to RRSP/Cash." },
@@ -16,16 +25,25 @@ const BasicSettings = ({ scenario, onUpdate }) => {
         'NB': { limit: 0, text: "New Brunswick generally does not allow one-time unlocking (0%)." },
         'NL': { limit: 0, text: "Newfoundland generally does not allow one-time unlocking (0%)." },
         'PE': { limit: 0, text: "PEI generally does not allow one-time unlocking (0%)." },
-        'FED': { limit: 50, text: "Federal jurisdiction allows 50% unlocking." } // 참고용
+        'FED': { limit: 50, text: "Federal jurisdiction allows 50% unlocking." }
     };
 
     const currentRule = UNLOCKING_RULES[province] || { limit: 0, text: "Check your specific provincial legislation." };
-    const userUnlockingPercent = scenario.settings.lockedIn.unlockingPercent || 0;
+    const userUnlockingPercent = scenario.settings.lockedIn ? scenario.settings.lockedIn.unlockingPercent : 0;
     const showWarning = userUnlockingPercent > currentRule.limit;
 
     const handleSettingChange = (key, value) => {
         const numericValue = !isNaN(parseFloat(value)) ? parseFloat(value) : value;
         onUpdate(key, numericValue);
+    };
+
+    // ★★★ [신설] 배우자 설정 업데이트 핸들러 ★★★
+    const handleSpouseChange = (field, value) => {
+        const newValue = field === 'enabled' ? value : (!isNaN(parseFloat(value)) ? parseFloat(value) : value);
+        onUpdate('spouseSettings', {
+            ...spouseSettings,
+            [field]: newValue
+        });
     };
 
     const provinces = [
@@ -62,6 +80,18 @@ const BasicSettings = ({ scenario, onUpdate }) => {
         fontSize: '14px',
         fontWeight: '500',
         marginBottom: '4px'
+    };
+
+    const sectionHeaderStyle = {
+        fontSize: '18px', 
+        fontWeight: '600', 
+        marginBottom: '16px', 
+        marginTop: '24px', 
+        borderTop: '1px solid #374151', 
+        paddingTop: '16px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
     };
 
     return (
@@ -139,7 +169,6 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                     </select>
                 </div>
 
-                {/* ★★★ [신규] 인플레이션 입력 필드 추가 ★★★ */}
                 <div>
                     <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}} htmlFor="generalInflation">
                         <span>General Inflation (%)</span>
@@ -179,7 +208,75 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                 </div>
             </div>
 
-            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', marginTop: '24px', borderTop: '1px solid #374151', paddingTop: '16px' }}>
+            {/* ★★★ [신설] Spouse Settings Section ★★★ */}
+            <div style={sectionHeaderStyle}>
+                <span>Spouse Settings (Income Splitting)</span>
+                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                    <span style={{fontSize: '14px', color: spouseSettings.enabled ? '#a5f3fc' : '#6b7280'}}>
+                        {spouseSettings.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            checked={spouseSettings.enabled} 
+                            onChange={(e) => handleSpouseChange('enabled', e.target.checked)} 
+                            className="sr-only peer" 
+                        />
+                        <div className="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                </div>
+            </div>
+
+            {spouseSettings.enabled && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '10px' }}>
+                    <div>
+                        <label style={labelStyle} htmlFor="spouseBirthYear">Spouse Birth Year</label>
+                        <select
+                            id="spouseBirthYear"
+                            style={inputStyle}
+                            value={spouseSettings.birthYear}
+                            onChange={(e) => handleSpouseChange('birthYear', e.target.value)}
+                        >
+                            {birthYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={labelStyle} htmlFor="spouseCpp">Spouse Annual CPP</label>
+                        <input
+                            type="number"
+                            id="spouseCpp"
+                            style={inputStyle}
+                            value={spouseSettings.cppAmount}
+                            onChange={(e) => handleSpouseChange('cppAmount', e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label style={labelStyle} htmlFor="spouseOas">Spouse Annual OAS</label>
+                        <input
+                            type="number"
+                            id="spouseOas"
+                            style={inputStyle}
+                            value={spouseSettings.oasAmount}
+                            onChange={(e) => handleSpouseChange('oasAmount', e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label style={labelStyle} htmlFor="spouseBaseIncome">Spouse Other Income</label>
+                        <Tooltip text="Other taxable base income for spouse (e.g. Company Pension). Do not include RRSP/LIF here as they are simulated.">
+                            <span style={{marginLeft: '4px', fontSize: '12px', color: '#9ca3af'}}>(?)</span>
+                        </Tooltip>
+                        <input
+                            type="number"
+                            id="spouseBaseIncome"
+                            style={inputStyle}
+                            value={spouseSettings.baseIncome}
+                            onChange={(e) => handleSpouseChange('baseIncome', e.target.value)}
+                        />
+                    </div>
+                </div>
+            )}
+
+            <h3 style={sectionHeaderStyle}>
                 Locked-in Account Settings
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
@@ -189,37 +286,29 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                         type="number"
                         id="conversionAge"
                         style={inputStyle}
-                        value={scenario.settings.lockedIn.conversionAge}
+                        value={scenario.settings.lockedIn ? scenario.settings.lockedIn.conversionAge : 71}
                         onChange={(e) => handleSettingChange('lockedIn.conversionAge', e.target.value)}
                     />
                 </div>
                 
-                {/* Unlocking % 입력 필드 및 가이드 */}
                 <div>
                     <label style={labelStyle} htmlFor="unlockingPercent">Unlocking % (to RRSP)</label>
                     <input
                         type="number"
                         id="unlockingPercent"
                         style={{...inputStyle, borderColor: showWarning ? '#f59e0b' : '#4b5563'}}
-                        value={scenario.settings.lockedIn.unlockingPercent}
+                        value={scenario.settings.lockedIn ? scenario.settings.lockedIn.unlockingPercent : 50}
                         onChange={(e) => handleSettingChange('lockedIn.unlockingPercent', e.target.value)}
                     />
                     <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
                         {currentRule.text}
                     </div>
-                    {showWarning && (
-                        <div style={{ fontSize: '12px', color: '#f59e0b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <svg style={{width:'12px', height:'12px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                            <span>High value for {province}. Normally limited to {currentRule.limit}%. (Allowed for small balances)</span>
-                        </div>
-                    )}
                 </div>
 
-                {/* ★★★ [수정] CANSIM Rate 툴팁 개선 ★★★ */}
                 <div>
                     <label style={{...labelStyle, display: 'flex', alignItems: 'center', gap: '8px'}} htmlFor="cansimRate">
                         <span>LIF CANSIM Rate (%)</span>
-                        <Tooltip text="A government benchmark rate used to calculate the maximum you can withdraw from a LIF. Higher rates = higher max withdrawal limits. Lower rates = lower limits. (Note: Minimum withdrawal is determined only by age.)">
+                        <Tooltip text="A government benchmark rate used to calculate the maximum you can withdraw from a LIF.">
                             <svg style={{color: '#9ca3af', cursor: 'pointer', height: '16px', width: '16px'}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                             </svg>
@@ -229,7 +318,7 @@ const BasicSettings = ({ scenario, onUpdate }) => {
                         type="number"
                         id="cansimRate"
                         style={inputStyle}
-                        value={scenario.settings.lockedIn.cansimRate}
+                        value={scenario.settings.lockedIn ? scenario.settings.lockedIn.cansimRate : 3.5}
                         onChange={(e) => handleSettingChange('lockedIn.cansimRate', e.target.value)}
                     />
                 </div>
