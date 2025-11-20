@@ -19,8 +19,7 @@ var lookAheadAndAdvise = function(currentAge, currentYear, rrspBalance, currentB
             return acc;
         }, 0);
 
-        // [수정] RRIF 최소 인출액은 여전히 RRIF 잔액(rrspBalance)으로 계산합니다.
-        var futureRrifMin = getRrifMinWithdrawal(futureAge, futureRrspBalance);
+        var futureRrifMin = getMinWithdrawal(futureAge, futureRrspBalance, 'rrsp');
         var totalFutureBaseIncome = futureAnnualIncomes + futureRrifMin;
         futureIncomes.push(totalFutureBaseIncome);
     }
@@ -37,57 +36,77 @@ var lookAheadAndAdvise = function(currentAge, currentYear, rrspBalance, currentB
     return 0;
 };
 
-// [수정] LIF 최소 인출 계산 로직을 포함하도록 함수를 확장
+// RRIF 최소 인출률 (71세 이상용, 기존 유지)
 var RRIF_LIF_WITHDRAWAL_RATES = {
-    // RRIF/LIF 공통 연방 최소 인출률 (71세부터)
     71: 0.0528, 72: 0.0540, 73: 0.0553, 74: 0.0567, 75: 0.0582,
     76: 0.0598, 77: 0.0617, 78: 0.0636, 79: 0.0658, 80: 0.0682,
     81: 0.0708, 82: 0.0738, 83: 0.0771, 84: 0.0808, 85: 0.0851,
     86: 0.0899, 87: 0.0955, 88: 0.1021, 89: 0.1099, 90: 0.1192,
     91: 0.1306, 92: 0.1449, 93: 0.1634, 94: 0.1879, 95: 0.2000
-    // 95세 이상은 20%
 };
 
 /**
  * LIF와 RRIF의 최소 인출액을 계산합니다.
- * LIF는 55세부터 최소 인출이 시작됩니다.
- * @param {number} age - 현재 나이
- * @param {number} balance - 현재 계좌 잔액
- * @param {string} accountType - 'rrsp' 또는 'lif'
- * @returns {number} - 최소 인출 금액
+ * LIF는 data.js의 테이블을 참조하여 50세부터 정확한 비율을 적용합니다.
  */
 var getMinWithdrawal = function(age, balance, accountType) {
     if (balance <= 0) return 0;
 
     var rate = 0;
     if (accountType === 'rrsp') {
-        // RRIF는 71세부터 최소 인출
+        // RRIF는 71세부터 최소 인출 (기존 로직 유지)
         if (age < 71) return 0;
         rate = age >= 95 ? 0.20 : (RRIF_LIF_WITHDRAWAL_RATES[age] || 0);
     } else if (accountType === 'lif') {
-        // LIF는 은퇴 나이(55세)부터 최소 인출
-        if (age < 55) return 0;
-
-        // 71세 미만의 LIF 최소 인출 (T-4)
-        if (age < 71) {
-            // (1 / (90 - age)) 공식을 따르며, 71세의 5.28%보다 작음
-            // 연방 기준: (1 / (90 - age)) * 100%
-            rate = 1 / Math.max(1, 90 - age);
-            // 55세: 1/35 ≈ 0.02857 (2.86%)
-            // 70세: 1/20 = 0.05 (5%)
+        // ★★★ [수정] 공식 제거 및 테이블 참조 (LIF_MIN_WITHDRAWAL_RATES는 data.js에 정의됨) ★★★
+        // 95세 이상은 20% 고정
+        if (age >= 95) {
+            rate = 0.20;
         } else {
-            // 71세 이상의 LIF 최소 인출은 RRIF와 동일 (T-4)
-            rate = age >= 95 ? 0.20 : (RRIF_LIF_WITHDRAWAL_RATES[age] || 0);
+            // data.js에 정의된 테이블에서 조회 (없으면 0)
+            rate = (typeof LIF_MIN_WITHDRAWAL_RATES !== 'undefined' && LIF_MIN_WITHDRAWAL_RATES[age]) 
+                   ? LIF_MIN_WITHDRAWAL_RATES[age] 
+                   : 0;
         }
     } else {
-        return 0; // RRSP/LIF가 아닌 경우
+        return 0;
     }
 
     return balance * rate;
 };
 
-// [삭제] 기존의 RRIF 전용 함수는 새 함수로 대체
-// var getRrifMinWithdrawal = function(age, rrspBalance) { ... };
+/**
+ * ★★★ [신설] LIF 최대 인출액 계산 (CANSIM Rate 연동) ★★★
+ * @param {number} age - 현재 나이
+ * @param {number} balance - LIF 잔액
+ * @param {number} cansimRate - data.js에서 넘어온 CANSIM 금리 (decimal, e.g., 0.035)
+ * @param {string} jurisdiction - 관할 구역 (e.g., 'ON', 'BC', 'FED')
+ */
+var getLIFMaxWithdrawal = function(age, balance, cansimRate, jurisdiction) {
+    if (balance <= 0) return 0;
+    
+    // 1. [안전장치 & 규정] 90세 이상은 최대 한도 없음 (100% 인출 가능)
+    // 수학적 오류(0으로 나누기) 방지 목적 포함
+    if (age >= 90) {
+        return balance;
+    }
+    
+    // 2. 금리 결정 (Reference Rate)
+    // ON, BC, AB 등 대부분의 주는 'CANSIM과 6.00% 중 큰 값'을 사용
+    var i = cansimRate;
+    var provsWithFloor = ['ON', 'BC', 'AB', 'SK', 'MB', 'NB', 'NS', 'NL'];
+    if (!jurisdiction || provsWithFloor.includes(jurisdiction)) {
+        i = Math.max(cansimRate, 0.06);
+    }
+
+    // 3. 연금 계수(Factor) 계산: F = (1 - (1 + i)^-(90 - age)) / i
+    var T = 90 - age;
+    var factor = (1 - Math.pow(1 + i, -T)) / i;
+
+    // 4. 최대 인출액 = 잔액 / 계수
+    if (factor <= 0) return balance; // 안전장치
+    return balance / factor;
+};
 
 
 var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
@@ -99,38 +118,37 @@ var findOptimalAnnualStrategy = function(amountNeeded, balances, yearContext) {
 
     var MAX_ITERATIONS = 3;
     var currentWithdrawalPlan = { rrsp: 0, tfsa: 0, nonReg: 0 };
-    var finalTaxResult = { tax: 0 };
+    var finalTaxResult = { totalTax: 0 }; // Fix initialized prop
     var logMessage = "Plan A: Iterative solver started.";
     var result;
 
     for (var i = 0; i < MAX_ITERATIONS; i++) {
         var capitalGainRatio = balances.nonReg > 0 ? (balances.nonReg - (balances.nonRegACB || 0)) / balances.nonReg : 0;
 
-// Correctly create the income breakdown for tax estimation
-var tempIncomeBreakdown = {
-    otherIncome: initialIncomeBreakdown.otherIncome || 0,
-    rrspWithdrawal: currentWithdrawalPlan.rrsp,
-    capitalGains: Math.max(0, capitalGainRatio) * currentWithdrawalPlan.nonReg
-};
+        var tempIncomeBreakdown = {
+            otherIncome: initialIncomeBreakdown.otherIncome || 0,
+            rrspWithdrawal: currentWithdrawalPlan.rrsp,
+            canadianDividend: initialIncomeBreakdown.canadianDividend || 0, // Add dividend preservation
+            capitalGains: Math.max(0, capitalGainRatio) * currentWithdrawalPlan.nonReg + (initialIncomeBreakdown.capitalGains || 0)
+        };
 
-var oasIncomeData = scenario.incomes.find(function(inc) { return inc.type === 'OAS'; });
-var oasIncome = (oasIncomeData && startYear >= oasIncomeData.startYear)
-    ? oasIncomeData.amount * getInflationFactor(startYear, oasIncomeData.startYear, oasIncomeData.growthRate)
-    : 0;
+        var oasIncomeData = scenario.incomes.find(function(inc) { return inc.type === 'OAS'; });
+        var oasIncome = (oasIncomeData && startYear >= oasIncomeData.startYear)
+            ? oasIncomeData.amount * getInflationFactor(startYear, oasIncomeData.startYear, oasIncomeData.growthRate)
+            : 0;
 
-var netIncomeForClawback = (tempIncomeBreakdown.otherIncome || 0) + tempIncomeBreakdown.rrspWithdrawal + tempIncomeBreakdown.capitalGains + oasIncome;
+        var netIncomeForClawback = (tempIncomeBreakdown.otherIncome || 0) + tempIncomeBreakdown.rrspWithdrawal + tempIncomeBreakdown.capitalGains + (tempIncomeBreakdown.canadianDividend * 1.38) + oasIncome;
 
-var tempTaxResult = calculateTaxWithClawback({
-    incomeBreakdown: tempIncomeBreakdown,
-    netIncomeForClawback: netIncomeForClawback,
-    oasIncome: oasIncome,
-    age: age,
-    taxParameters: taxParameters,
-    province: scenario.settings.province
-});
+        var tempTaxResult = calculateTaxWithClawback({
+            incomeBreakdown: tempIncomeBreakdown,
+            netIncomeForClawback: netIncomeForClawback,
+            oasIncome: oasIncome,
+            age: age,
+            taxParameters: taxParameters,
+            province: scenario.settings.province
+        });
 
-// Fix the property name from .tax to .totalTax
-var estimatedTax = tempTaxResult.totalTax;
+        var estimatedTax = tempTaxResult.totalTax;
         var totalAmountNeeded = amountNeeded + estimatedTax;
 
         var totalAssets = balances.rrsp + balances.tfsa + balances.nonReg;
@@ -140,7 +158,7 @@ var estimatedTax = tempTaxResult.totalTax;
         var tfsaPenalty = strategicParams.tfsaPenalty;
 
         var currentBaseIncome = scenario.incomes.reduce(function(acc, inc) {
-            return (startYear >= inc.startYear && startYear <= (inc.endYear || scenario.settings.endYear) ? acc + inc.amount : acc);
+            return (startYear >= inc.startYear && startYear <= (inc.endYear || scenario.settings.endYear ? inc.endYear : 2100) ? acc + inc.amount : acc);
         }, 0);
         var rrspCostAdjustment = lookAheadAndAdvise(age, startYear, balances.rrsp, currentBaseIncome, scenario);
         
